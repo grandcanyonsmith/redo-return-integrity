@@ -77,7 +77,7 @@ export function LiveDecisionOutput({
       <div className="ai-live ai-live--pending" role="status">
         <div className="ai-live__scan"><LoaderCircle className="spin" aria-hidden="true" /></div>
         <div>
-          <small>LIVE EVALUATION</small>
+          <small>ASSESSMENT REQUEST</small>
           <strong>Running the decision contract…</strong>
           <p>Native facts → deterministic signals → OpenAI assessment → merchant policy → accountable action.</p>
         </div>
@@ -88,7 +88,7 @@ export function LiveDecisionOutput({
     return (
       <div className="ai-live-empty">
         <EmptyNotice icon={Sparkles} title="No live output yet">
-          Run a multimodal assessment to see native facts, deterministic signals, OpenAI reasoning, merchant policy, and the accountable next step.
+          Run an evidence assessment to see native facts, deterministic signals, assessment rationale, merchant policy, and the accountable next step.
         </EmptyNotice>
       </div>
     )
@@ -101,7 +101,7 @@ export function LiveDecisionOutput({
   return (
     <section className={`ai-live ${compact ? 'ai-live--compact' : ''} ai-live--${assessment.mode}`} aria-label="Live decision output">
       <header className="ai-live__top">
-        <span><Sparkles aria-hidden="true" /><strong>Live model output</strong></span>
+        <span><Sparkles aria-hidden="true" /><strong>{assessment.mode === 'live' ? 'OpenAI assessment' : assessment.mode === 'unavailable' ? 'Assessment unavailable' : 'Synthetic assessment fallback'}</strong></span>
         <div className="ai-live__meta">
           {modeBadge(assessment.mode)}
           {assessment.modelVersion ? <Badge tone="neutral">{assessment.modelVersion}</Badge> : null}
@@ -119,14 +119,14 @@ export function LiveDecisionOutput({
           {assessment.confidence != null ? <em>{assessment.confidence.toFixed(2)}</em> : null}
         </div>
         <p>{assessment.summary}</p>
-        <div className="vision-result__facts">
+        {assessment.imageFindings.length > 0 ? <div className="vision-result__facts">
           <span><strong>Quantity visible</strong>{visibleQuantity(assessment)}</span>
           <span><strong>Serials legible</strong>{serialsLegible(assessment)}</span>
           <span><strong>Image sufficiency</strong>{imageSufficiency(assessment)}</span>
-        </div>
+        </div> : null}
       </Response>
 
-      <Reasoning defaultOpen={!compact} duration={assessment.latencyMs} isStreaming={pending}>
+      <Reasoning defaultOpen={false} duration={assessment.latencyMs} isStreaming={pending}>
         <ReasoningTrigger />
         <ReasoningContent>
           {assessment.status ? <p><strong>Status.</strong> {assessment.status} · disposition {recommendation}.</p> : null}
@@ -154,7 +154,7 @@ export function LiveDecisionOutput({
         </ReasoningContent>
       </Reasoning>
 
-      <ChainOfThought defaultOpen>
+      <ChainOfThought defaultOpen={false}>
         <ChainOfThoughtHeader>Decision chain & logic</ChainOfThoughtHeader>
         <ChainOfThoughtContent>
           <ChainOfThoughtStep icon={Database} label="Native facts" status="complete" description="Point-in-time fields only. Future events cannot leak backward.">
@@ -227,7 +227,7 @@ export function LiveDecisionOutput({
       </ChainOfThought>
 
       {displaySignals.length > 0 ? (
-        <Tool defaultOpen={!compact}>
+        <Tool defaultOpen={false}>
           <ToolHeader title="deriveDeterministicSignals" state="output-available" />
           <ToolContent>
             <ToolOutput
@@ -246,8 +246,8 @@ export function LiveDecisionOutput({
         </Tool>
       ) : null}
 
-      <Sources defaultOpen>
-        <SourcesTrigger count={assessment.evidenceIds.length || 1} />
+      <Sources defaultOpen={false}>
+        <SourcesTrigger count={assessment.evidenceIds.length}>{assessment.evidenceIds.length ? undefined : 'No evidence sources cited'}</SourcesTrigger>
         <SourcesContent>
           {(assessment.evidenceIds.length ? assessment.evidenceIds : ['No evidence IDs cited']).map((id) => (
             <Source key={id} title={id} />

@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
-import { Bot, Box, Camera, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, LoaderCircle, PackageOpen, Ruler, ScanBarcode, Scale, ShieldCheck, Upload, Warehouse } from 'lucide-react'
-import { useState } from 'react'
+import { Bot, Box, Camera, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, LoaderCircle, PackageOpen, Ruler, ScanBarcode, Scale, ShieldCheck, Warehouse } from 'lucide-react'
+import { type KeyboardEvent, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { LiveDecisionOutput } from '../components/LiveDecisionOutput'
 import { Badge, PageIntro } from '../components/ui'
 import { checkpoints, formatStatus, type DemoState } from '../domain'
@@ -10,8 +11,6 @@ import { useDemo } from '../lib/demo-context'
 const evidenceImages = [
   { src: '/evidence/return-empty-box.png', label: 'Open container · Empty', view: 'Camera 02' },
   { src: '/evidence/outbound-two-cameras.png', label: 'Outbound reference', view: 'Pack station' },
-  { src: '/evidence/return-wrong-item.png', label: 'Wrong-item fixture', view: 'Camera 02' },
-  { src: '/evidence/return-imitation.png', label: 'Imitation fixture', view: 'Inspection mat' },
 ]
 
 const protocol = [
@@ -23,35 +22,58 @@ const protocol = [
   { label: 'Scan item serial & qty', value: 'No item observed · qty 0', icon: ClipboardCheck },
 ]
 
+const findingOptions = ['empty', 'decoy', 'wrong-item', 'possible-imitation', 'quantity-mismatch', 'inconclusive'] as const
+
 export function OperatorPage() {
   const { state, update } = useDemo()
   const [imageIndex, setImageIndex] = useState(0)
-  const [finding, setFinding] = useState<DemoState['physicalFinding']>(state.physicalFinding)
+  const [finding, setFinding] = useState<DemoState['physicalFinding'] | null>(state.physical === 'inspection-hold' ? null : state.physicalFinding)
   const [operatorConfirmed, setOperatorConfirmed] = useState(false)
   const inspectionCheckpoint = checkpoints.find((point) => point.id === 'ITEM_INSPECTION')!
   const assessment = useQuery({
-    queryKey: ['evaluate-checkpoint', inspectionCheckpoint.id, finding],
-    queryFn: () => evaluateCheckpoint(inspectionCheckpoint, { ...state, physicalFinding: finding }),
+    queryKey: ['evaluate-checkpoint', inspectionCheckpoint.id, finding ?? 'unselected'],
+    queryFn: () => {
+      if (!finding) throw new Error('Select a native finding before requesting an assessment.')
+      return evaluateCheckpoint(inspectionCheckpoint, { ...state, physicalFinding: finding })
+    },
+    enabled: false,
   })
 
   const finalize = () => {
-    if (!operatorConfirmed) return
+    if (!operatorConfirmed || !finding) return
     update({ physical: 'review-pending', physicalFinding: finding })
+  }
+  const selectFinding = (next: DemoState['physicalFinding']) => {
+    setFinding(next)
+    setOperatorConfirmed(false)
+  }
+  const moveFindingFocus = (event: KeyboardEvent<HTMLButtonElement>, current: DemoState['physicalFinding']) => {
+    const index = findingOptions.indexOf(current)
+    let nextIndex = index
+    if (event.key === 'ArrowRight' || event.key === 'ArrowDown') nextIndex = (index + 1) % findingOptions.length
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') nextIndex = (index - 1 + findingOptions.length) % findingOptions.length
+    if (event.key === 'Home') nextIndex = 0
+    if (event.key === 'End') nextIndex = findingOptions.length - 1
+    if (nextIndex === index) return
+    event.preventDefault()
+    const next = findingOptions[nextIndex]
+    selectFinding(next)
+    document.getElementById(`finding-${next}`)?.focus()
   }
 
   return (
     <div className="page operator-page">
-      <PageIntro eyebrow="MANAGED VERIFY · OPERATOR STATION" title={<>Capture once. <em>Trust the record.</em></>} description="A guided warehouse workflow creates controlled, reproducible ground truth for empty, decoy, wrong-item, possible-imitation, and quantity-mismatch returns." actions={<Badge tone="orange" icon={Warehouse}>Station DEN-04 · Online</Badge>} />
+      <PageIntro eyebrow="MANAGED VERIFY · CAPTURE REVIEW" title={<>Review the capture. <em>Record only what you see.</em></>} description="This synthetic station starts after the six-step warehouse capture is complete. Confirm a neutral native observation before requesting any model assessment or routing the case to a merchant." actions={<Badge tone="violet" icon={Warehouse}>Station DEN-04 · Synthetic fixture</Badge>} />
 
       <div className="operator-header">
-        <button><ChevronLeft aria-hidden="true" /> Queue</button>
+        <Link className="operator-back" to="/"><ChevronLeft aria-hidden="true" /> Dashboard</Link>
         <div><Badge tone="blue">RMA-8821</Badge><strong>Juniper Arc One · Order JC-1042</strong><span>Expected: 2 cameras · 1.80 kg · Serials JCA1-88K2 / JCA1-91M7</span></div>
         <div className="operator-progress"><small>Protocol</small><strong>6 / 6</strong><span><i style={{ width: '100%' }} /></span></div>
       </div>
 
       <div className="operator-layout">
         <section className="capture-viewer">
-          <header><div><span className="live-dot" /> LIVE CAPTURE REVIEW</div><Badge tone="violet">SYNTHETIC FIXTURE</Badge></header>
+          <header><div>COMPLETED CAPTURE RECORD</div><Badge tone="violet">SYNTHETIC FIXTURE</Badge></header>
           <figure>
             <img src={evidenceImages[imageIndex].src} alt={`Synthetic fixture: ${evidenceImages[imageIndex].label}`} />
             <figcaption><span>{evidenceImages[imageIndex].view}</span><strong>{evidenceImages[imageIndex].label}</strong><small>Aug 24, 2026 · 14:14:08.422 · fixture checksum logged</small></figcaption>
@@ -60,9 +82,8 @@ export function OperatorPage() {
           </figure>
           <div className="thumbnail-strip">
             {evidenceImages.map((image, index) => <button key={image.src} className={imageIndex === index ? 'active' : ''} aria-label={`View ${image.label}`} onClick={() => setImageIndex(index)}><img src={image.src} alt="" /><span>{index + 1}</span></button>)}
-            <label className="thumbnail-upload" title="Local fixture selection only — not uploaded"><Upload aria-hidden="true" /><span>Local only</span><input type="file" accept="image/jpeg,image/png,image/webp" /></label>
           </div>
-          <p className="fixture-disclosure"><ShieldCheck size={15} aria-hidden="true" /><strong>Privacy-safe demo:</strong> all shown imagery is synthetic. Optional file selection stays local and is not analyzed or transmitted.</p>
+          <p className="fixture-disclosure"><ShieldCheck size={15} aria-hidden="true" /><strong>Privacy-safe demo:</strong> all shown imagery is synthetic and bound to RMA-8821. No customer upload or production analysis occurs on this surface.</p>
         </section>
 
         <aside className="protocol-panel">
@@ -77,11 +98,11 @@ export function OperatorPage() {
           <span className="eyebrow">OPERATOR FINDING</span>
           <h2>What was physically observed?</h2>
           <div className="finding-options" role="radiogroup" aria-label="Inspection finding">
-            {(['empty', 'decoy', 'wrong-item', 'possible-imitation', 'quantity-mismatch', 'inconclusive'] as const).map((option) => <button role="radio" aria-checked={finding === option} className={finding === option ? 'active' : ''} key={option} onClick={() => { setFinding(option); setOperatorConfirmed(false) }}><span>{finding === option ? <Check /> : null}</span>{formatStatus(option)}</button>)}
+            {findingOptions.map((option) => <button id={`finding-${option}`} role="radio" aria-checked={finding === option} tabIndex={finding === option || (!finding && option === 'empty') ? 0 : -1} className={finding === option ? 'active' : ''} key={option} onClick={() => selectFinding(option)} onKeyDown={(event) => moveFindingFocus(event, option)}><span>{finding === option ? <Check /> : null}</span>{formatStatus(option)}</button>)}
           </div>
-          <div className="operator-observation"><Box aria-hidden="true" /><div><strong>Structured observation</strong><p>{finding === 'empty' ? 'No merchandise observed after a complete six-frame unpacking sequence. Outer packaging and RMA label are present. Expected quantity 2 cameras; observed quantity 0.' : `${formatStatus(finding)} selected. This finding remains an operator observation until confirmed and routed to merchant review.`}</p></div></div>
-          <label className="checkbox-label checkbox-label--boxed"><input type="checkbox" checked={operatorConfirmed} onChange={(event) => setOperatorConfirmed(event.target.checked)} /><span>I completed the required capture protocol and confirm this describes what I observed. I am not making the refund decision.</span></label>
-          <button className="button button--primary" disabled={!operatorConfirmed} onClick={finalize}><ClipboardCheck size={17} /> Confirm finding & route to merchant</button>
+          <div className="operator-observation"><Box aria-hidden="true" /><div><strong>Structured observation</strong><p>{!finding ? 'No discrepancy classification is selected. Review the capture record, then choose the observation that the images and native measurements support.' : finding === 'empty' ? 'No merchandise observed after a complete six-frame unpacking sequence. Outer packaging and RMA label are present. Expected quantity 2 cameras; observed quantity 0.' : `${formatStatus(finding)} selected. This finding remains an operator observation until confirmed and routed to merchant review.`}</p></div></div>
+          <label className="checkbox-label checkbox-label--boxed"><input type="checkbox" checked={operatorConfirmed} disabled={!finding} onChange={(event) => setOperatorConfirmed(event.target.checked)} /><span>I reviewed the completed capture protocol and confirm this describes what I observed. I am not making the refund decision.</span></label>
+          <button className="button button--primary" disabled={!operatorConfirmed || !finding} onClick={finalize}><ClipboardCheck size={17} /> Confirm finding & route to merchant</button>
         </div>
 
         <div className="vision-panel">
@@ -92,9 +113,9 @@ export function OperatorPage() {
               : <Badge tone="neutral">{assessment.isFetching ? 'RUNNING' : 'NOT RUN'}</Badge>}
           </header>
           <LiveDecisionOutput assessment={assessment.data} pending={assessment.isFetching} />
-          <button className="button button--secondary" disabled={assessment.isFetching} onClick={() => assessment.refetch()}>
+          <button className="button button--secondary" disabled={!finding || !operatorConfirmed || assessment.isFetching} onClick={() => assessment.refetch()}>
             {assessment.isFetching ? <LoaderCircle className="spin" /> : <Bot />}
-            {assessment.isFetching ? 'Analyzing evidence…' : 'Refresh multimodal assessment'}
+            {assessment.isFetching ? 'Analyzing evidence…' : !finding ? 'Select a native finding first' : !operatorConfirmed ? 'Confirm the observation first' : assessment.data ? 'Run assessment again' : 'Run evidence assessment'}
           </button>
         </div>
       </section>

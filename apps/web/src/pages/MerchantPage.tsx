@@ -17,10 +17,12 @@ import {
   ShieldCheck,
   Sparkles,
   UserCheck,
+  Warehouse,
   X,
   XCircle,
 } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { LiveDecisionOutput } from '../components/LiveDecisionOutput'
 import { Badge, EmptyNotice, MetricCard, PageIntro } from '../components/ui'
 import { checkpoints, formatStatus, outcomeMetrics } from '../domain'
@@ -28,27 +30,54 @@ import { evaluateCheckpoint } from '../lib/api'
 import { useDemo } from '../lib/demo-context'
 
 const cases = [
-  { id: 'RMA-8821', order: 'JC-1042', shopper: 'Alex Morgan', amount: '$1,849', type: 'Empty return', score: 'High', status: 'Review', updated: '4m', image: '/evidence/return-empty-box.png' },
-  { id: 'RMA-8819', order: 'JC-1038', shopper: 'Jordan Lee', amount: '$729', type: 'Wrong item', score: 'Medium', status: 'Evidence', updated: '18m', image: '/evidence/return-wrong-item.png' },
-  { id: 'RMA-8814', order: 'JC-1027', shopper: 'Sam Rivera', amount: '$1,249', type: 'Possible imitation', score: 'Medium', status: 'Inspection', updated: '42m', image: '/evidence/return-imitation.png' },
+  { id: 'RMA-8821', order: 'JC-1042', shopper: 'Alex Morgan', amount: '$1,849', type: 'Empty return', updated: '4m', image: '/evidence/return-empty-box.png' },
 ]
 
 type Decision = 'approve' | 'partial' | 'request' | 'deny' | null
 
 export function MerchantPage() {
   const { state, update } = useDemo()
-  const [selectedId, setSelectedId] = useState('RMA-8821')
   const [query, setQuery] = useState('')
   const [decision, setDecision] = useState<Decision>(null)
   const [note, setNote] = useState('')
   const [certified, setCertified] = useState(false)
-  const selected = cases.find((item) => item.id === selectedId) ?? cases[0]
-  const visibleCases = useMemo(() => cases.filter((item) => `${item.id} ${item.order} ${item.shopper} ${item.type}`.toLowerCase().includes(query.toLowerCase())), [query])
+  const rationaleRef = useRef<HTMLTextAreaElement>(null)
+  const selected = cases[0]
+  const operatorFindingReady = state.physical !== 'inspection-hold'
+  const displayType = operatorFindingReady ? selected.type : 'Awaiting operator finding'
+  const visibleCases = useMemo(() => cases.filter((item) => `${item.id} ${item.order} ${item.shopper} ${operatorFindingReady ? item.type : 'awaiting operator finding'}`.toLowerCase().includes(query.toLowerCase())), [operatorFindingReady, query])
   const inspectionCheckpoint = checkpoints.find((point) => point.id === 'ITEM_INSPECTION')!
   const liveEvaluation = useQuery({
-    queryKey: ['evaluate-checkpoint', inspectionCheckpoint.id, selectedId, state.physicalFinding],
+    queryKey: ['evaluate-checkpoint', inspectionCheckpoint.id, selected.id, state.physicalFinding],
     queryFn: () => evaluateCheckpoint(inspectionCheckpoint, state),
+    enabled: operatorFindingReady,
   })
+
+  useEffect(() => {
+    if (!decision) return
+    const previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    rationaleRef.current?.focus()
+    const handleDialogKeys = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setDecision(null)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const dialog = rationaleRef.current?.closest('[role="dialog"]')
+      const focusable = dialog ? Array.from(dialog.querySelectorAll<HTMLElement>('button:not([disabled]), textarea:not([disabled]), input:not([disabled])')) : []
+      if (!focusable.length) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus() }
+      if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
+    }
+    document.addEventListener('keydown', handleDialogKeys)
+    return () => {
+      document.removeEventListener('keydown', handleDialogKeys)
+      previousFocus?.focus()
+    }
+  }, [decision])
 
   const finalize = () => {
     if (!decision || !certified || !note.trim()) return
@@ -61,7 +90,7 @@ export function MerchantPage() {
 
   return (
     <div className="page merchant-page">
-      <PageIntro eyebrow="MERCHANT CONSOLE · JUNIPER CIRCUIT" title={<>Make the decision. <em>See the proof.</em></>} description="A case workspace that keeps model recommendation, merchant policy, and accountable human action distinct — with shopper cure and payment evidence visible from the start." actions={<button className="button button--secondary"><FileText size={16} aria-hidden="true" /> Export audit log</button>} />
+      <PageIntro eyebrow="MERCHANT CONSOLE · JUNIPER CIRCUIT" title={<>Make the decision. <em>See the proof.</em></>} description="A case workspace that keeps model recommendation, merchant policy, and accountable human action distinct — with shopper cure and payment evidence visible from the start." actions={<Link className="button button--secondary" to="/lifecycle?checkpoint=ITEM_INSPECTION"><FileText size={16} aria-hidden="true" /> View decision contract</Link>} />
       <div className="merchant-kpis">
         {outcomeMetrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </div>
@@ -69,17 +98,16 @@ export function MerchantPage() {
 
       <div className="case-workspace">
         <aside className="case-queue">
-          <header><div><span className="eyebrow">CASE QUEUE</span><h2>Needs attention <b>{visibleCases.length}</b></h2></div><button aria-label="Queue settings">•••</button></header>
+          <header><div><span className="eyebrow">ACTIVE DEMO CASE</span><h2>Needs attention <b>{visibleCases.length}</b></h2></div></header>
           <label className="searchbox"><Search size={16} aria-hidden="true" /><input placeholder="Search returns" aria-label="Search returns" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
-          <div className="queue-filters"><button className="active">All 12</button><button>Review 3</button><button>Appeals 1</button></div>
           <div className="case-list">
             {visibleCases.length ? visibleCases.map((item) => (
-              <button key={item.id} className={selectedId === item.id ? 'case-row case-row--active' : 'case-row'} onClick={() => setSelectedId(item.id)}>
+              <div key={item.id} className="case-row case-row--active" aria-current="true">
                 <img src={item.image} alt="" />
-                <span className="case-row__copy"><small>{item.id} · {item.updated} ago</small><strong>{item.type}</strong><span>{item.order} · {item.shopper}</span></span>
-                <span className="case-row__amount">{item.amount}<Badge tone={item.score === 'High' ? 'red' : 'orange'}>{item.score}</Badge></span>
+                <span className="case-row__copy"><small>{item.id} · {item.updated} ago</small><strong>{operatorFindingReady ? item.type : 'Awaiting operator finding'}</strong><span>{item.order} · {item.shopper}</span></span>
+                <span className="case-row__amount">{item.amount}<Badge tone="orange">High priority</Badge></span>
                 <ChevronRight size={16} aria-hidden="true" />
-              </button>
+              </div>
             )) : (
               <EmptyNotice
                 icon={Search}
@@ -90,6 +118,7 @@ export function MerchantPage() {
               </EmptyNotice>
             )}
           </div>
+          <p className="queue-scope-note"><ShieldCheck size={15} aria-hidden="true" /><span>This review surface intentionally follows one coherent case from capture through appeal. <Link to="/intake">Explore other package fixtures in Scan Return.</Link></span></p>
         </aside>
 
         <section className={`case-detail${visibleCases.length ? '' : ' case-detail--empty'}`}>
@@ -104,10 +133,20 @@ export function MerchantPage() {
           ) : (
             <>
           <header className="case-detail__header">
-            <div><div className="decision-card__badges"><Badge tone="orange">{selected.type.toUpperCase()}</Badge><Badge tone="violet">SYNTHETIC FIXTURE</Badge><Badge tone="neutral">{state.physical === 'inspection-hold' ? 'REFUND HELD' : formatStatus(state.physical).toUpperCase()}</Badge></div><h2>{selected.id} <span>· Order {selected.order}</span></h2><p>{selected.shopper} · Juniper Arc One 2-camera field kit</p></div>
+            <div><div className="decision-card__badges"><Badge tone={operatorFindingReady ? 'orange' : 'blue'}>{displayType.toUpperCase()}</Badge><Badge tone="violet">SYNTHETIC FIXTURE</Badge><Badge tone="neutral">{state.physical === 'inspection-hold' ? 'REFUND HELD' : formatStatus(state.physical).toUpperCase()}</Badge></div><h2>{selected.id} <span>· Order {selected.order}</span></h2><p>{selected.shopper} · Juniper Arc One 2-camera field kit</p></div>
             <div className="case-detail__amount"><small>Refund requested</small><strong>{selected.amount}.00</strong></div>
           </header>
 
+          {!operatorFindingReady ? (
+            <section className="merchant-awaiting-operator" aria-labelledby="operator-review-required">
+              <span className="merchant-awaiting-operator__icon"><Warehouse aria-hidden="true" /></span>
+              <Badge tone="blue">SEQUENCE GATE</Badge>
+              <h3 id="operator-review-required">Operator review required</h3>
+              <p>The completed capture record is available, but no neutral warehouse observation has been confirmed or routed. A finding, model assessment, and merchant decision will remain hidden until that step is complete.</p>
+              <Link className="button button--primary" to="/operator">Open warehouse capture review <ArrowRight size={16} aria-hidden="true" /></Link>
+            </section>
+          ) : (
+            <>
           <div className="case-overview">
             <figure className="case-photo"><img src={selected.image} alt={`Synthetic evidence fixture for ${selected.type.toLowerCase()}`} /><figcaption><Badge tone="violet">SYNTHETIC EVIDENCE · NOT A CUSTOMER PHOTO</Badge><span>Inbound camera 02 · Aug 24, 2:14:08 PM</span></figcaption></figure>
             <div className="finding-summary">
@@ -132,8 +171,8 @@ export function MerchantPage() {
           </div>
 
           <div className="human-decision">
-            <div className="human-decision__intro"><span className="human-avatar">CS</span><div><span className="eyebrow">ACCOUNTABLE HUMAN ACTION</span><h3>{state.physical === 'appealed' ? 'Second review required' : 'Canyon Smith · Merchant reviewer'}</h3><p>{state.physical === 'appealed' ? 'The shopper supplied new context. A different authorized reviewer must compare it to the original evidence.' : 'Review the evidence and select a reversible next step. The model has no authority to execute your choice.'}</p></div></div>
-            {state.physical === 'appealed' ? <div className="appeal-callout"><RefreshCw aria-hidden="true" /><div><strong>Shopper appeal received — timer paused</strong><p>“I used the same box for two returns. The other item may have been sent under this label…”</p><div><button className="button button--primary" onClick={() => update({ physical: 'overturned' })}><CheckCircle2 size={16} /> Overturn & approve refund</button><button className="button button--secondary" onClick={() => setDecision('deny')}><Gavel size={16} /> Uphold after review</button></div></div></div> : (
+            <div className="human-decision__intro"><span className="human-avatar">DR</span><div><span className="eyebrow">ACCOUNTABLE HUMAN ACTION</span><h3>{state.physical === 'appealed' ? 'Second review required' : 'Demo reviewer · unauthenticated persona'}</h3><p>{state.physical === 'appealed' ? 'The shopper supplied new context. A different authorized reviewer must compare it to the original evidence.' : 'Review the evidence and select a reversible next step. This browser-local persona is not proof of login, role, or physical identity.'}</p></div></div>
+            {state.physical === 'appealed' ? <div className="appeal-callout"><RefreshCw aria-hidden="true" /><div><strong>Shopper appeal received — timer paused</strong><p>“{state.appealExplanation ?? 'I used the same box for two returns. The other item may have been sent under this label…'}”{state.appealEvidenceName ? <small>Selected evidence filename: {state.appealEvidenceName} · file contents are not retained by this browser demo.</small> : null}</p><div><button className="button button--primary" onClick={() => update({ physical: 'overturned' })}><CheckCircle2 size={16} /> Overturn & approve refund</button><button className="button button--secondary" onClick={() => setDecision('deny')}><Gavel size={16} /> Uphold after review</button></div></div></div> : (
               <div className="decision-actions">
                 <button onClick={() => setDecision('approve')}><CheckCircle2 /><strong>Approve</strong><span>Release full refund</span></button>
                 <button onClick={() => setDecision('partial')}><ArrowUpRight /><strong>Partial</strong><span>Set adjusted amount</span></button>
@@ -148,6 +187,8 @@ export function MerchantPage() {
           ) : null}
             </>
           )}
+            </>
+          )}
         </section>
       </div>
 
@@ -157,8 +198,9 @@ export function MerchantPage() {
             <button className="modal-close" aria-label="Close decision dialog" onClick={() => setDecision(null)}><X /></button>
             <Badge tone={decision === 'deny' ? 'red' : 'blue'} icon={UserCheck}>HUMAN DECISION</Badge>
             <h2 id="decision-title">{decision === 'deny' ? 'Document an adverse decision' : `${formatStatus(decision)} this return`}</h2>
-            <p>{decision === 'deny' ? 'The shopper will receive your reason, the evidence summary, a 48-hour contest window, and an accessible appeal path. Nothing is sent to a payment network.' : 'Record why this outcome is supported. The audit trail will identify you as the accountable reviewer.'}</p>
-            <label className="field-label">Reviewer rationale<textarea rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Cite the evidence and policy you reviewed…" /></label>
+            <p>{decision === 'deny' ? 'The shopper will receive your reason, the evidence summary, a 48-hour contest window, and an accessible appeal path. Nothing is sent to a payment network.' : 'Record why this outcome is supported. This demo stores only browser-local scenario state and does not authenticate the reviewer.'}</p>
+            <div className="decision-requirements" aria-label="Decision record requirements"><span><small>Evidence set</small><strong>9 synthetic artifacts · checksummed</strong></span><span><small>Policy snapshot</small><strong>RET-HV-04 · v3.4</strong></span><span><small>Shopper notice</small><strong>48-hour cure + appeal</strong></span></div>
+            <label className="field-label">Reviewer rationale<textarea ref={rationaleRef} rows={4} value={note} onChange={(event) => setNote(event.target.value)} placeholder="Cite the evidence and policy you reviewed…" /></label>
             <label className="checkbox-label checkbox-label--boxed"><input type="checkbox" checked={certified} onChange={(event) => setCertified(event.target.checked)} /><span>I reviewed the native evidence, model recommendation, merchant policy, and available shopper context. This is my decision.</span></label>
             {decision === 'deny' ? <div className="modal-warning"><AlertTriangle /><span>Denial is reversible during appeal. Evidence remains “ready,” never “submitted,” until an authorized payment workflow accepts it.</span></div> : null}
             <button className={`button button--full ${decision === 'deny' ? 'button--danger' : 'button--primary'}`} disabled={!certified || !note.trim()} onClick={finalize}><Gavel size={16} /> Record {formatStatus(decision)} decision</button>

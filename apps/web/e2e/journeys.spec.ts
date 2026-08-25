@@ -7,6 +7,29 @@ test('good actor completes an alternate checkout verification', async ({ page })
   await expect(page.getByText(/does not add a fraud label/i)).toBeVisible()
 })
 
+test('dashboard tasks open the exact shopper journey', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('link', { name: /impossible logistics/i }).click()
+  await expect(page).toHaveURL(/\/shopper\?journey=return$/)
+  await expect(page.getByRole('tab', { name: /return handoff/i })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.getByRole('tabpanel', { name: /return handoff/i })).toBeVisible()
+})
+
+test('warehouse review does not preselect a discrepancy or auto-present a model result', async ({ page }) => {
+  await page.goto('/operator')
+  await expect(page.getByRole('radio', { name: /^empty$/i })).toHaveAttribute('aria-checked', 'false')
+  await expect(page.getByText(/no discrepancy classification is selected/i)).toBeVisible()
+  await expect(page.getByRole('button', { name: /select a native finding first/i })).toBeDisabled()
+  await expect(page.getByText(/no live output yet/i)).toBeVisible()
+})
+
+test('merchant review stays locked until a neutral warehouse observation is routed', async ({ page }) => {
+  await page.goto('/merchant')
+  await expect(page.getByRole('heading', { name: /operator review required/i })).toBeVisible()
+  await expect(page.getByText(/corroborated finding/i)).toHaveCount(0)
+  await expect(page.getByRole('button', { name: /deny requires reason/i })).toHaveCount(0)
+})
+
 test('impossible logistics is cured with a receipt image', async ({ page }) => {
   await page.goto('/shopper')
   await page.getByRole('tab', { name: /return handoff/i }).click()
@@ -17,6 +40,10 @@ test('impossible logistics is cured with a receipt image', async ({ page }) => {
 })
 
 test('adverse return outcome requires a human and opens shopper appeal', async ({ page }) => {
+  await page.goto('/operator')
+  await page.getByRole('radio', { name: /^empty$/i }).click()
+  await page.getByRole('checkbox', { name: /i reviewed the completed capture protocol/i }).check()
+  await page.getByRole('button', { name: /confirm finding & route to merchant/i }).click()
   await page.goto('/merchant')
   await page.getByRole('button', { name: /deny requires reason/i }).click()
   await page.getByLabel(/reviewer rationale/i).fill('Complete capture protocol shows an empty container and no expected serial.')
@@ -25,8 +52,22 @@ test('adverse return outcome requires a human and opens shopper appeal', async (
   await expect(page.getByText(/contest window is open/i)).toBeVisible()
   await page.goto('/shopper')
   await page.getByRole('tab', { name: /contest & appeal/i }).click()
+  await page.locator('input[type=file]').setInputFiles({ name: 'appeal-proof.png', mimeType: 'image/png', buffer: Buffer.from('fixture') })
   await page.getByRole('button', { name: /submit for a second human review/i }).click()
-  await expect(page.getByText(/your evidence is preserved/i)).toBeVisible()
+  await expect(page.getByText(/your appeal details are recorded/i)).toBeVisible()
+  await expect(page.getByText('appeal-proof.png')).toBeVisible()
+  await page.reload()
+  await expect(page.getByText(/your appeal details are recorded/i)).toBeVisible()
+  await expect(page.getByText('appeal-proof.png')).toBeVisible()
+})
+
+test('dashboard and evaluation lab fit a 320px viewport', async ({ page }) => {
+  await page.setViewportSize({ width: 320, height: 800 })
+  for (const path of ['/', '/lab']) {
+    await page.goto(path)
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
+    expect(overflow, `${path} should not overflow horizontally`).toBe(false)
+  }
 })
 
 test('narrow lifecycle exposes the full decision contract without horizontal page overflow', async ({ page }, testInfo) => {
@@ -59,4 +100,26 @@ test('merchant scans a test label and receives a human-gated structured inspecti
   await page.getByRole('button', { name: /persist human review/i }).click()
   await expect(page.getByText(/review was not persisted/i)).toBeVisible()
   await expect(page.getByRole('button', { name: /queue test shopper message/i })).toBeDisabled()
+})
+
+test('interactive tools gallery advances in-frame and deep-links to the full journeys', async ({ page }) => {
+  await page.goto('/tools')
+  await expect(page.getByRole('tab', { name: /operations/i })).toHaveAttribute('aria-selected', 'true')
+
+  await page.getByRole('button', { name: /preview label lookup/i }).click()
+  await expect(page.getByRole('heading', { name: /return preview found/i })).toBeVisible()
+  await page.getByRole('button', { name: /continue from label lookup to inspect package/i }).click()
+  await expect(page).toHaveURL(/category=operations&demo=inspect-contents/)
+
+  await page.getByRole('button', { name: /quantity mismatch/i }).click()
+  await page.getByRole('button', { name: /analyze contents/i }).click()
+  await expect(page.getByText('QUANTITY_MISMATCH')).toBeVisible()
+  await expect(page.getByText('$924.50 refund')).toBeVisible()
+
+  await page.getByRole('tab', { name: /shopper/i }).click()
+  await expect(page.getByRole('heading', { name: /one quick check before we ship/i })).toBeVisible()
+  await expect(page.getByRole('link', { name: /^open checkout journey$/i })).toHaveAttribute('href', '/shopper?journey=checkout')
+
+  const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
+  expect(overflow).toBe(false)
 })

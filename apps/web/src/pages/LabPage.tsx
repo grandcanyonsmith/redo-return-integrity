@@ -24,6 +24,7 @@ export function LabPage() {
   const [controlLoss, setControlLoss] = useState(2.4)
   const [treatmentLoss, setTreatmentLoss] = useState(1.8)
   const [falsePositive, setFalsePositive] = useState(1.8)
+  const [savedThreshold, setSavedThreshold] = useState<number | null>(null)
 
   const result = useMemo(() => {
     const returns = gmv * returnRate / 100
@@ -113,7 +114,8 @@ export function LabPage() {
           <div className="threshold-controls">
             <label><span>Maximum legitimate challenge rate</span><div className="range-field"><input type="range" min="0" max="10" step="0.1" value={falsePositive} onChange={(event) => setFalsePositive(Number(event.target.value))} /><strong>{falsePositive}%</strong></div></label>
             <div className="guardrail-list"><span><Check /> ID challenge decline stays “unknown”</span><span><Check /> Technical failure measured separately</span><span><Check /> Conversion and support contacts monitored</span><span><Check /> Protected-class proxies audited</span><span><X /> No fraud label from challenge abandonment</span></div>
-            <button className="button button--secondary"><SlidersHorizontal size={16} /> Save as shadow threshold</button>
+            <button type="button" className="button button--secondary" onClick={() => setSavedThreshold(falsePositive)}><SlidersHorizontal size={16} /> {savedThreshold === falsePositive ? 'Shadow threshold saved locally' : 'Save as shadow threshold'}</button>
+            {savedThreshold !== null ? <p className="shadow-save-status" role="status">Saved {savedThreshold}% for this browser view only. No shopper or production policy was changed.</p> : null}
           </div>
         </div>
       </section>

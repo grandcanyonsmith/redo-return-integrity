@@ -17,7 +17,7 @@ export const workQueue = (state: DemoState): WorkItem[] => {
       id: 'checkout',
       title: 'Checkout challenge · JC-1042',
       detail: 'High-value order to a new address. Shopper has a one-minute verification — not a fraud label.',
-      href: '/shopper',
+      href: '/shopper?journey=checkout',
       owner: 'Shopper',
       tone: 'orange',
       status: 'Action available',
@@ -30,7 +30,7 @@ export const workQueue = (state: DemoState): WorkItem[] => {
       detail: state.reverseLogistics === 'receipt-reviewed'
         ? 'Staffed receipt selected. Match it to restore the return without an adverse label.'
         : 'Carrier ingest conflicts with the authorized drop-off. Ask for a staffed receipt or open a trace.',
-      href: '/shopper',
+      href: '/shopper?journey=return',
       owner: 'Shopper',
       tone: 'blue',
       status: state.reverseLogistics === 'receipt-reviewed' ? 'Evidence attached' : 'Return paused',
@@ -39,15 +39,15 @@ export const workQueue = (state: DemoState): WorkItem[] => {
   if (state.physical === 'inspection-hold') {
     items.push({
       id: 'inspect',
-      title: 'Managed verify · empty kit',
-      detail: 'Inbound weight 0.18 kg vs 1.80 kg expected. Capture protocol is complete; confirm the operator finding.',
+      title: 'Managed Verify · capture review',
+      detail: 'The six-step synthetic capture is complete. Review native measurements and record a neutral operator observation before any model assessment.',
       href: '/operator',
       owner: 'Operator',
       tone: 'violet',
       status: 'Station DEN-04',
     })
   }
-  if (state.physical === 'inspection-hold' || state.physical === 'review-pending') {
+  if (state.physical === 'review-pending') {
     items.push({
       id: 'review',
       title: 'Merchant review · RMA-8821',
@@ -55,18 +55,18 @@ export const workQueue = (state: DemoState): WorkItem[] => {
       href: '/merchant',
       owner: 'Merchant',
       tone: 'orange',
-      status: state.physical === 'review-pending' ? 'Finding routed' : 'Refund held',
+      status: 'Finding routed',
     })
   }
-  if (state.physical === 'denied') {
+  if (state.physical === 'denied' || state.physical === 'evidence-ready') {
     items.push({
       id: 'contest',
       title: 'Contest window open',
       detail: 'Shopper can add context before the decision is final. Payment evidence is ready, not submitted.',
-      href: '/shopper',
+      href: '/shopper?journey=appeal',
       owner: 'Shopper',
       tone: 'orange',
-      status: '48-hour cure',
+      status: state.physical === 'evidence-ready' ? 'Evidence ready · cure open' : '48-hour cure',
     })
   }
   if (state.physical === 'appealed') {

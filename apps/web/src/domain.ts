@@ -205,6 +205,8 @@ export type DemoState = {
   physical: 'inspection-hold' | 'review-pending' | 'approved' | 'partial' | 'denied' | 'appealed' | 'overturned' | 'evidence-ready'
   physicalFinding: 'empty' | 'decoy' | 'wrong-item' | 'possible-imitation' | 'quantity-mismatch' | 'inconclusive'
   reviewerNote?: string
+  appealExplanation?: string
+  appealEvidenceName?: string
 }
 
 export const newDemoState = (): DemoState => ({

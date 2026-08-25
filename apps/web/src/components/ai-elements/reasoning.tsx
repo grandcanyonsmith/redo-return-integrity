@@ -57,10 +57,10 @@ export const Reasoning = memo(({
 export const ReasoningTrigger = memo(({ className, children, ...props }: ComponentProps<typeof CollapsibleTrigger>) => {
   const { isStreaming, isOpen, duration } = useReasoning()
   const label = isStreaming
-    ? 'Thinking…'
+    ? 'Assessment in progress…'
     : duration
-      ? `Thought for ${(duration / 1000).toFixed(1)}s`
-      : 'Model reasoning'
+      ? `Assessment rationale · completed in ${(duration / 1000).toFixed(1)}s`
+      : 'Assessment rationale'
   return (
     <CollapsibleTrigger className={cn('ai-reason__header', className)} {...props}>
       {children ?? (

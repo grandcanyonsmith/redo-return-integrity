@@ -3,10 +3,12 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
+import { newDemoState, type DemoState } from './domain'
 import { DemoProvider } from './lib/demo-context'
 
-function renderAt(path: string) {
+function renderAt(path: string, statePatch: Partial<DemoState> = {}) {
   sessionStorage.clear()
+  sessionStorage.setItem('redo-return-integrity:demo:v1', JSON.stringify({ ...newDemoState(), ...statePatch }))
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -34,7 +36,7 @@ describe('interview demo', () => {
   })
 
   it('requires a reason and certification before recording a human denial', async () => {
-    renderAt('/merchant')
+    renderAt('/merchant', { physical: 'review-pending' })
     await userEvent.click(screen.getByRole('button', { name: /deny requires reason/i }))
     const record = screen.getByRole('button', { name: /record deny decision/i })
     expect(record).toBeDisabled()
@@ -88,6 +90,7 @@ describe('interview demo', () => {
     expect(screen.getByRole('heading', { name: /work the queue/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /needs attention/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /checkout challenge/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /impossible logistics/i })).toHaveAttribute('href', '/shopper?journey=return')
     expect(screen.getByRole('link', { name: /^dashboard$/i })).toHaveClass('topnav__link--active')
 
     await userEvent.type(screen.getByLabelText(/filter work queue/i), 'zzzz-no-match')
@@ -110,6 +113,32 @@ describe('interview demo', () => {
     expect(screen.getByText(/no adverse decision to contest/i)).toBeInTheDocument()
   })
 
+  it('keeps merchant findings and decision controls locked until the operator routes an observation', () => {
+    renderAt('/merchant')
+    expect(screen.getByRole('heading', { name: /operator review required/i })).toBeInTheDocument()
+    expect(screen.queryByText(/corroborated finding/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /deny requires reason/i })).not.toBeInTheDocument()
+  })
+
+  it('keeps evidence-ready appeals in the work queue and does not call the walkthrough complete', () => {
+    renderAt('/', { checkout: 'cleared', reverseLogistics: 'cleared', physical: 'evidence-ready' })
+    expect(screen.getByRole('link', { name: /contest window open/i })).toHaveAttribute('href', '/shopper?journey=appeal')
+    expect(screen.getByText(/2 of 3/i)).toBeInTheDocument()
+    expect(screen.queryByText(/every demo journey is resolved/i)).not.toBeInTheDocument()
+  })
+
+  it('records appeal explanation and selected filename in browser-local scenario state', async () => {
+    renderAt('/shopper?journey=appeal', { physical: 'denied' })
+    const file = new File(['fixture'], 'appeal-proof.png', { type: 'image/png' })
+    await userEvent.upload(document.querySelector('input[type="file"]') as HTMLInputElement, file)
+    await userEvent.click(screen.getByRole('button', { name: /submit for a second human review/i }))
+    expect(screen.getByRole('heading', { name: /appeal details are recorded/i })).toBeInTheDocument()
+    expect(screen.getByText('appeal-proof.png')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /appeal-proof\.png/i })).toBeDisabled()
+    expect(document.querySelector('input[type="file"]')).toBeDisabled()
+    expect(screen.getByText(/does not upload or retain file contents/i)).toBeInTheDocument()
+  })
+
   it('shows a lifecycle empty state when filters match nothing', async () => {
     renderAt('/lifecycle')
     await userEvent.click(screen.getByRole('button', { name: /^purchase$/i }))
@@ -117,5 +146,78 @@ describe('interview demo', () => {
     expect(screen.getByText(/no checkpoints in this view/i)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /reset filters/i }))
     expect(screen.getByTestId('checkpoint-VISIT_SESSION')).toBeInTheDocument()
+  })
+
+  it('opens the exact shopper journey from the URL and supports arrow-key tab navigation', async () => {
+    renderAt('/shopper?journey=return')
+    const returnTab = screen.getByRole('tab', { name: /return handoff/i })
+    expect(returnTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tabpanel')).toHaveAccessibleName(/return handoff/i)
+
+    returnTab.focus()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: /contest & appeal/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText(/no adverse decision to contest/i)).toBeInTheDocument()
+  })
+
+  it('keeps the operator neutral until a person selects and confirms an observation', async () => {
+    renderAt('/operator')
+    expect(screen.getByRole('radio', { name: /^empty$/i })).toHaveAttribute('aria-checked', 'false')
+    expect(screen.getByText(/no discrepancy classification is selected/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /select a native finding first/i })).toBeDisabled()
+
+    await userEvent.click(screen.getByRole('radio', { name: /^inconclusive$/i }))
+    expect(screen.getByRole('radio', { name: /^inconclusive$/i })).toHaveAttribute('aria-checked', 'true')
+    expect(screen.getByRole('button', { name: /confirm the observation first/i })).toBeDisabled()
+  })
+
+  it('labels the single merchant case and reviewer persona honestly', () => {
+    renderAt('/merchant', { physical: 'review-pending' })
+    expect(screen.getByText(/active demo case/i)).toBeInTheDocument()
+    expect(screen.getByText(/one coherent case/i)).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /demo reviewer · unauthenticated persona/i })).toBeInTheDocument()
+    expect(screen.queryByText(/jordan lee/i)).not.toBeInTheDocument()
+  })
+
+  it('provides skip navigation and route-specific document titles', () => {
+    renderAt('/lifecycle')
+    expect(screen.getByRole('link', { name: /skip to main content/i })).toHaveAttribute('href', '#main-content')
+    expect(document.title).toBe('Decision lifecycle · Redo Return Integrity')
+  })
+
+  it('offers a Redo-style clickable demo gallery with working in-frame actions', async () => {
+    renderAt('/tools')
+
+    expect(await screen.findByRole('heading', { name: /try the return integrity layer/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /operations/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: /scan return label/i })).toHaveAttribute('aria-current', 'page')
+
+    await userEvent.click(screen.getByRole('button', { name: /preview label lookup/i }))
+    expect(screen.getByRole('heading', { name: /return preview found/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /continue from label lookup to inspect package/i }))
+    expect(screen.getByRole('heading', { name: /what came back/i })).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /quantity mismatch/i }))
+    await userEvent.click(screen.getByRole('button', { name: /analyze contents/i }))
+    expect(screen.getByText('QUANTITY_MISMATCH')).toBeInTheDocument()
+    expect(screen.getByText('$924.50 refund')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: /shopper/i }))
+    expect(screen.getByRole('heading', { name: /one quick check before we ship/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^open checkout journey$/i })).toHaveAttribute('href', '/shopper?journey=checkout')
+  })
+
+  it('restores a deep-linked merchant communication demo and supports keyboard tab movement', async () => {
+    renderAt('/tools?category=merchant&demo=approve-message')
+
+    const merchantTab = await screen.findByRole('tab', { name: /merchant/i })
+    expect(merchantTab).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: /review the customer-message contract/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^open communication review$/i })).toHaveAttribute('href', '/intake')
+
+    merchantTab.focus()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(screen.getByRole('tab', { name: /intelligence/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: /inspect the decision lifecycle/i })).toBeInTheDocument()
   })
 })

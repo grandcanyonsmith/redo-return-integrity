@@ -5,8 +5,12 @@ import {
   Bot,
   CheckCircle2,
   ClipboardList,
+  CreditCard,
   Inbox,
   LayoutDashboard,
+  PackageSearch,
+  Route,
+  RotateCcw,
   ScanBarcode,
   Search,
   ShieldCheck,
@@ -25,8 +29,11 @@ const stations = [
   { to: '/merchant', label: 'Merchant console', detail: 'Review, policy, human decision', icon: Store },
   { to: '/operator', label: 'Operator station', detail: 'Capture protocol and live vision', icon: Warehouse },
   { to: '/intake', label: 'Return intake', detail: 'Label lookup and inspection', icon: ScanBarcode },
-  { to: '/shopper', label: 'Shopper journeys', detail: 'Challenge, receipt, contest', icon: UserRound },
+  { to: '/shopper?journey=checkout', label: 'Shopper journeys', detail: 'Challenge, receipt, contest', icon: UserRound },
 ]
+
+type OwnerFilter = 'All' | 'Shopper' | 'Operator' | 'Merchant'
+const ownerFilters: OwnerFilter[] = ['All', 'Shopper', 'Operator', 'Merchant']
 
 const healthSchemaOk = (body: unknown): body is { ok: boolean; model?: string; openAIConfigured?: boolean } =>
   typeof body === 'object' && body !== null && 'ok' in body
@@ -34,10 +41,11 @@ const healthSchemaOk = (body: unknown): body is { ok: boolean; model?: string; o
 export function DashboardPage() {
   const { state } = useDemo()
   const [query, setQuery] = useState('')
+  const [ownerFilter, setOwnerFilter] = useState<OwnerFilter>('All')
   const items = workQueue(state)
   const visible = useMemo(
-    () => items.filter((item) => `${item.title} ${item.detail} ${item.owner} ${item.status}`.toLowerCase().includes(query.trim().toLowerCase())),
-    [items, query],
+    () => items.filter((item) => (ownerFilter === 'All' || item.owner === ownerFilter) && `${item.title} ${item.detail} ${item.owner} ${item.status}`.toLowerCase().includes(query.trim().toLowerCase())),
+    [items, ownerFilter, query],
   )
   const health = useQuery({
     queryKey: ['api-health'],
@@ -56,6 +64,29 @@ export function DashboardPage() {
     { label: 'Return handoff', value: formatStatus(state.reverseLogistics), tone: state.reverseLogistics === 'cleared' ? 'green' as const : 'blue' as const },
     { label: 'Physical return', value: formatStatus(state.physical), tone: state.physical === 'approved' || state.physical === 'overturned' ? 'green' as const : 'orange' as const },
   ]
+  const checkoutDone = state.checkout === 'cleared'
+  const handoffDone = state.reverseLogistics === 'cleared'
+  const physicalDone = state.physical === 'approved' || state.physical === 'partial' || state.physical === 'overturned'
+  const completedJourneys = [checkoutDone, handoffDone, physicalDone].filter(Boolean).length
+  const walkthroughComplete = completedJourneys === 3
+  const nextItem = items[0]
+  const physicalHref = state.physical === 'inspection-hold'
+    ? '/operator'
+    : state.physical === 'denied' || state.physical === 'evidence-ready'
+      ? '/shopper?journey=appeal'
+      : '/merchant'
+  const guidedSteps = [
+    { label: 'Verify checkout', detail: 'Clear a high-value order without assigning a fraud label.', href: '/shopper?journey=checkout', done: checkoutDone, current: !checkoutDone, icon: CreditCard },
+    { label: 'Resolve handoff', detail: 'Use a staffed receipt to explain impossible carrier timing.', href: '/shopper?journey=return', done: handoffDone, current: checkoutDone && !handoffDone, icon: Route },
+    { label: 'Review the return', detail: 'Capture evidence, route a finding, and preserve appeal.', href: physicalHref, done: physicalDone, current: checkoutDone && handoffDone && !physicalDone, icon: PackageSearch },
+  ]
+  const apiStatus = health.isPending
+    ? { label: 'Checking API', tone: 'neutral' as const, icon: Activity }
+    : health.isError
+      ? { label: 'API offline · local demo ready', tone: 'orange' as const, icon: Activity }
+      : health.data.openAIConfigured
+        ? { label: `OpenAI ready · ${health.data.model ?? 'configured model'}`, tone: 'green' as const, icon: Bot }
+        : { label: 'Safe demo fallback ready', tone: 'violet' as const, icon: ShieldCheck }
 
   return (
     <div className="page dashboard-page">
@@ -64,13 +95,48 @@ export function DashboardPage() {
         eyebrow="OPERATIONS DASHBOARD"
         title={<>Work the queue. <em>See the proof.</em></>}
         description="Live demo state for Juniper Circuit: open shopper tasks, warehouse inspection, and merchant review — with model output kept separate from accountable decisions."
-        actions={<Badge tone={health.data?.openAIConfigured ? 'green' : 'violet'} icon={health.data?.openAIConfigured ? Bot : Activity}>{health.data?.openAIConfigured ? `API ready · ${health.data.model ?? 'OpenAI'}` : health.isError ? 'API unreachable' : 'Checking API'}</Badge>}
+        actions={<span className="health-status" role="status" aria-live="polite"><Badge tone={apiStatus.tone} icon={apiStatus.icon}>{apiStatus.label}</Badge>{health.isError ? <button type="button" onClick={() => health.refetch()}>Retry</button> : null}</span>}
       />
 
+      <section className="dashboard-command" aria-labelledby="guided-demo-title">
+        <div className="dashboard-command__copy">
+          <Badge tone={walkthroughComplete ? 'green' : 'orange'} icon={walkthroughComplete ? CheckCircle2 : ClipboardList}>{walkthroughComplete ? 'Walkthrough complete' : 'Recommended next step'}</Badge>
+          <h2 id="guided-demo-title">{nextItem ? nextItem.title : walkthroughComplete ? 'Every demo journey is resolved.' : 'An unresolved journey still needs attention.'}</h2>
+          <p>{nextItem ? nextItem.detail : walkthroughComplete ? 'The checkout, carrier handoff, and physical-return decision now have a reviewable outcome. Reset the isolated session to run the story again.' : 'Open the current journey step below to continue. The walkthrough is complete only after all three journeys have reviewable outcomes.'}</p>
+          <div className="dashboard-progress" aria-label={`${completedJourneys} of 3 demo journeys complete`}>
+            <span><strong>{completedJourneys} of 3</strong> journeys complete</span>
+            <div aria-hidden="true"><i style={{ width: `${(completedJourneys / 3) * 100}%` }} /></div>
+          </div>
+          <div className="dashboard-command__actions">
+            {nextItem
+              ? <Link className="button button--primary" to={nextItem.href}>Continue as {nextItem.owner} <ArrowRight size={16} aria-hidden="true" /></Link>
+              : walkthroughComplete
+                ? <Link className="button button--primary" to="/reset"><RotateCcw size={16} aria-hidden="true" /> Reset walkthrough</Link>
+                : <Link className="button button--primary" to={physicalHref}>Continue unresolved journey <ArrowRight size={16} aria-hidden="true" /></Link>}
+            <Link className="button button--secondary" to="/lifecycle">Explore the decision lifecycle</Link>
+          </div>
+        </div>
+        <ol className="guided-journey" aria-label="Guided demo journey">
+          {guidedSteps.map(({ label, detail, href, done, current, icon: Icon }, index) => (
+            <li key={label}>
+              <Link to={href} className={`guided-step${done ? ' guided-step--done' : ''}${current ? ' guided-step--current' : ''}`} aria-current={current ? 'step' : undefined}>
+                <span className="guided-step__icon">{done ? <CheckCircle2 aria-hidden="true" /> : <Icon aria-hidden="true" />}</span>
+                <span className="guided-step__copy"><small>STEP {index + 1}</small><strong>{label}</strong><span>{detail}</span></span>
+                <Badge tone={done ? 'green' : current ? 'orange' : 'neutral'}>{done ? 'Complete' : current ? 'Next' : 'Up next'}</Badge>
+              </Link>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <div className="dashboard-section-heading">
+        <div><span className="eyebrow">ILLUSTRATIVE SCORECARD</span><h2>Outcome model</h2></div>
+        <p>Fixture values demonstrate the accounting boundaries; they are not production results.</p>
+      </div>
       <div className="metric-grid" aria-label="Illustrative outcome metrics">
         {outcomeMetrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </div>
-      <p className="dashboard-note"><ShieldCheck size={15} aria-hidden="true" /> Metrics are illustrative fixtures. Abandoned verification is not counted as fraud. Live OpenAI recommends; people decide adverse outcomes.</p>
+      <p className="dashboard-note"><ShieldCheck size={15} aria-hidden="true" /> Metrics are illustrative fixtures. Abandoned verification is not counted as fraud. Model output remains a recommendation; people decide adverse outcomes.</p>
 
       <div className="dashboard-grid">
         <section className="dashboard-panel" aria-label="Work queue">
@@ -81,7 +147,12 @@ export function DashboardPage() {
             </div>
             <Badge tone={items.length ? 'orange' : 'green'} icon={items.length ? ClipboardList : CheckCircle2}>{items.length ? 'Open work' : 'Clear'}</Badge>
           </header>
-          <label className="searchbox"><Search size={16} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter by case, owner, or status" aria-label="Filter work queue" /></label>
+          <div className="queue-controls">
+            <label className="searchbox"><Search size={16} aria-hidden="true" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Filter by case, owner, or status" aria-label="Filter work queue" /></label>
+            <div className="queue-owner-filters" role="group" aria-label="Filter work by owner">
+              {ownerFilters.map((owner) => <button key={owner} type="button" aria-pressed={ownerFilter === owner} className={ownerFilter === owner ? 'active' : ''} onClick={() => setOwnerFilter(owner)}>{owner}</button>)}
+            </div>
+          </div>
           {visible.length ? (
             <ul className="work-list">
               {visible.map((item) => (
@@ -102,7 +173,7 @@ export function DashboardPage() {
             <EmptyNotice
               icon={Inbox}
               title={items.length ? 'No matching work' : 'Queue is clear'}
-              actions={query ? <button type="button" className="button button--secondary button--small" onClick={() => setQuery('')}>Clear filter</button> : <Link className="button button--secondary button--small" to="/reset">Reset demo session</Link>}
+              actions={query || ownerFilter !== 'All' ? <button type="button" className="button button--secondary button--small" onClick={() => { setQuery(''); setOwnerFilter('All') }}>Clear filters</button> : <Link className="button button--secondary button--small" to="/reset">Reset demo session</Link>}
             >
               {items.length
                 ? 'Nothing in this session matches that filter. Clear it to see open shopper, operator, and merchant tasks.'

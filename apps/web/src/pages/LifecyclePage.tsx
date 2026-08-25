@@ -42,7 +42,7 @@ export function LifecyclePage() {
       <div className="lifecycle-toolbar">
         <span><Filter size={16} aria-hidden="true" /> Filter decision surface</span>
         <div className="segmented" role="group" aria-label="Phase filter">
-          {(['All', ...lifecyclePhases] as const).map((item) => <button key={item} className={phase === item ? 'active' : ''} onClick={() => setPhase(item)}>{item}</button>)}
+          {(['All', ...lifecyclePhases] as const).map((item) => <button key={item} type="button" aria-pressed={phase === item} className={phase === item ? 'active' : ''} onClick={() => setPhase(item)}>{item}</button>)}
         </div>
         <label>Coverage<select value={coverage} onChange={(event) => setCoverage(event.target.value as typeof coverage)}><option>All</option><option>All GMV</option><option>Managed network</option><option>Merchant integrated</option></select></label>
       </div>
@@ -57,13 +57,13 @@ export function LifecyclePage() {
         <section className="lifecycle-list" aria-label="Lifecycle checkpoints">
           {filtered.map((point) => (
             <div className={`checkpoint-accordion ${expanded === point.id ? 'checkpoint-accordion--open' : ''}`} key={point.id}>
-              <button className="checkpoint-accordion__trigger" onClick={() => open(point.id)} aria-expanded={expanded === point.id}>
+              <button id={`checkpoint-trigger-${point.id}`} type="button" className="checkpoint-accordion__trigger" onClick={() => open(point.id)} aria-expanded={expanded === point.id} aria-controls={`checkpoint-panel-${point.id}`}>
                 <span className="checkpoint-number">{String(point.number).padStart(2, '0')}</span>
                 <span className="checkpoint-accordion__copy"><small>{point.phase} · {checkpointScope(point.number)} · {point.coverage}</small><strong>{point.label}</strong><span>{point.decision}</span></span>
                 <Badge tone={point.evidenceTier === 'E4' || point.evidenceTier === 'E5' ? 'orange' : 'neutral'}>{point.evidenceTier}</Badge>
                 <ChevronDown aria-hidden="true" />
               </button>
-              {expanded === point.id ? <div className="checkpoint-accordion__body"><DecisionPipeline checkpoint={point} /></div> : null}
+              {expanded === point.id ? <div id={`checkpoint-panel-${point.id}`} className="checkpoint-accordion__body" role="region" aria-labelledby={`checkpoint-trigger-${point.id}`}><DecisionPipeline checkpoint={point} /></div> : null}
             </div>
           ))}
           {!filtered.length ? (
