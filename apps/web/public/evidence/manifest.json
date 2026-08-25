@@ -1,0 +1,32 @@
+{
+  "fixtureSet": "juniper-circuit-return-integrity-v1",
+  "createdAt": "2026-08-24T00:00:00Z",
+  "synthetic": true,
+  "containsPersonalData": false,
+  "items": [
+    {
+      "path": "/evidence/outbound-two-cameras.png",
+      "role": "outbound_reference",
+      "expectedQuantity": 2,
+      "observedQuantity": 2
+    },
+    {
+      "path": "/evidence/return-empty-box.png",
+      "role": "warehouse_inspection",
+      "scenario": "empty_return",
+      "observedQuantity": 0
+    },
+    {
+      "path": "/evidence/return-wrong-item.png",
+      "role": "warehouse_inspection",
+      "scenario": "wrong_item",
+      "observedQuantity": 0
+    },
+    {
+      "path": "/evidence/return-imitation.png",
+      "role": "warehouse_inspection",
+      "scenario": "possible_imitation_and_quantity_mismatch",
+      "observedQuantity": 1
+    }
+  ]
+}

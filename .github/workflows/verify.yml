@@ -1,0 +1,92 @@
+name: Verify
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts-build-and-synth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: true
+      CDK_DEFAULT_REGION: us-west-2
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Typecheck all workspaces
+        run: npm run typecheck
+
+      - name: Run unit and contract tests
+        run: npm test
+
+      - name: Build all artifacts
+        run: npm run build
+
+      - name: Synthesize CloudFormation
+        run: npm run synth
+
+      - name: Preserve review artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-and-cloudformation-${{ github.sha }}
+          if-no-files-found: error
+          retention-days: 7
+          path: |
+            apps/web/dist/
+            infra/cdk.out/*.template.json
+
+  browser-journeys:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CI: true
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run responsive end-to-end journeys
+        run: npm run test:e2e
+
+      - name: Preserve failure report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ github.sha }}
+          if-no-files-found: ignore
+          retention-days: 7
+          path: |
+            apps/web/playwright-report/
+            apps/web/test-results/
+
+# There is intentionally no AWS credential, deploy, publish, or secret step.

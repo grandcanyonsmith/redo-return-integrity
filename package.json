@@ -1,0 +1,34 @@
+{
+  "name": "redo-return-integrity",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Evidence-led return fraud decisioning demo for Redo",
+  "license": "MIT",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "services/*",
+    "infra"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace @redo-return-integrity/web",
+    "build": "npm run build --workspaces --if-present",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace @redo-return-integrity/web",
+    "synth": "npm run synth --workspace @return-integrity/infra",
+    "deploy": "npm run deploy --workspace @return-integrity/infra",
+    "verify": "npm run typecheck && npm run test && npm run build && npm run synth"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@10",
+  "allowScripts": {
+    "esbuild@0.25.12": true,
+    "esbuild@0.27.2": true,
+    "esbuild@0.28.2": true,
+    "fsevents@2.3.2": true,
+    "fsevents@2.3.3": true
+  }
+}
