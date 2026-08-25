@@ -15,6 +15,7 @@ export interface DemoSession {
   createdAt: string;
   expiresAt: string;
   evaluationCount: number;
+  uploadUrlCount: number;
 }
 
 export interface WaitlistLead {
@@ -37,6 +38,7 @@ export interface DataStore {
   putCase(sessionId: string, caseData: ReturnIntegrityCase): Promise<void>;
   appendEvent(sessionId: string, caseId: string, event: CaseActionEvent, caseData: ReturnIntegrityCase): Promise<void>;
   acquireEvaluationSlot(sessionId: string, now?: Date): Promise<{ sessionCount: number; dayCount: number }>;
+  acquireUploadUrlSlot(sessionId: string, now?: Date): Promise<{ sessionCount: number; dayCount: number }>;
   saveWaitlistLead(lead: WaitlistLead): Promise<"CREATED" | "EXISTING">;
 }
 
@@ -54,6 +56,7 @@ export class MemoryStore implements DataStore {
       createdAt: now.toISOString(),
       expiresAt: expiryDate(now, 1),
       evaluationCount: 0,
+      uploadUrlCount: 0,
     };
     this.sessions.set(session.sessionId, session);
     this.cases.set(session.sessionId, new Map(cloneFixtureCases().map((caseData) => [caseData.caseId, caseData])));
@@ -69,7 +72,9 @@ export class MemoryStore implements DataStore {
   async resetSession(sessionId: string, now = new Date()): Promise<DemoSession> {
     const current = await this.getSession(sessionId);
     if (!current) throw new Error("SESSION_NOT_FOUND");
-    const session: DemoSession = { ...current, evaluationCount: 0, expiresAt: expiryDate(now, 1) };
+    // Reset only the synthetic case workspace. Security/cost quotas are
+    // session-lifetime counters and deliberately cannot be reset by the client.
+    const session: DemoSession = { ...current, expiresAt: expiryDate(now, 1) };
     this.sessions.set(sessionId, session);
     this.cases.set(sessionId, new Map(cloneFixtureCases().map((caseData) => [caseData.caseId, caseData])));
     return structuredClone(session);
@@ -105,6 +110,20 @@ export class MemoryStore implements DataStore {
     session.evaluationCount += 1;
     this.dayCounts.set(dateKey, dayCount + 1);
     return { sessionCount: session.evaluationCount, dayCount: dayCount + 1 };
+  }
+
+  async acquireUploadUrlSlot(sessionId: string, now = new Date()): Promise<{ sessionCount: number; dayCount: number }> {
+    const session = this.sessions.get(sessionId);
+    if (!session || new Date(session.expiresAt).getTime() <= now.getTime()) throw new Error("SESSION_NOT_FOUND");
+    const dateKey = `upload:${now.toISOString().slice(0, 10)}`;
+    const dayCount = this.dayCounts.get(dateKey) ?? 0;
+    const sessionLimit = Number(process.env.MAX_UPLOAD_URLS_PER_SESSION ?? 12);
+    const dailyLimit = Number(process.env.DAILY_UPLOAD_URL_LIMIT ?? 120);
+    if (session.uploadUrlCount >= sessionLimit) throw new Error("UPLOAD_SESSION_LIMIT");
+    if (dayCount >= dailyLimit) throw new Error("DAILY_UPLOAD_LIMIT");
+    session.uploadUrlCount += 1;
+    this.dayCounts.set(dateKey, dayCount + 1);
+    return { sessionCount: session.uploadUrlCount, dayCount: dayCount + 1 };
   }
 
   async saveWaitlistLead(lead: WaitlistLead): Promise<"CREATED" | "EXISTING"> {
@@ -149,6 +168,7 @@ export class DynamoStore implements DataStore {
       createdAt: now.toISOString(),
       expiresAt: expiryDate(now, 1),
       evaluationCount: 0,
+      uploadUrlCount: 0,
     };
     const ttl = Math.floor(new Date(session.expiresAt).getTime() / 1_000);
     await this.client.send(new TransactWriteCommand({ TransactItems: [
@@ -166,6 +186,7 @@ export class DynamoStore implements DataStore {
       createdAt: String(result.Item.createdAt),
       expiresAt: String(result.Item.expiresAt),
       evaluationCount: Number(result.Item.evaluationCount ?? 0),
+      uploadUrlCount: Number(result.Item.uploadUrlCount ?? 0),
     };
     if (new Date(session.expiresAt).getTime() <= Date.now()) return undefined;
     return session;
@@ -178,7 +199,8 @@ export class DynamoStore implements DataStore {
     for (const caseData of existingCases) {
       await this.client.send(new DeleteCommand({ TableName: this.tableName, Key: this.caseKey(sessionId, caseData.caseId) }));
     }
-    const session: DemoSession = { ...existing, evaluationCount: 0, expiresAt: expiryDate(now, 1) };
+    // Resetting fixtures must not reset model or upload issuance quotas.
+    const session: DemoSession = { ...existing, expiresAt: expiryDate(now, 1) };
     const ttl = Math.floor(new Date(session.expiresAt).getTime() / 1_000);
     await this.client.send(new TransactWriteCommand({ TransactItems: [
       { Put: { TableName: this.tableName, Item: { ...this.sessionKey(sessionId), entity: "Session", ...session, ttl } } },
@@ -257,6 +279,43 @@ export class DynamoStore implements DataStore {
     }
     const countResult = await this.client.send(new GetCommand({ TableName: this.tableName, Key: { PK: `RATE#${dateKey}`, SK: "MODEL_EVALUATIONS" } }));
     return { sessionCount: session.evaluationCount + 1, dayCount: Number(countResult.Item?.evaluationCount ?? 1) };
+  }
+
+  async acquireUploadUrlSlot(sessionId: string, now = new Date()): Promise<{ sessionCount: number; dayCount: number }> {
+    const session = await this.getSession(sessionId);
+    if (!session) throw new Error("SESSION_NOT_FOUND");
+    const dateKey = now.toISOString().slice(0, 10);
+    const dayTtl = Math.floor(new Date(`${dateKey}T00:00:00.000Z`).getTime() / 1_000) + 2 * 24 * 60 * 60;
+    const sessionLimit = Number(process.env.MAX_UPLOAD_URLS_PER_SESSION ?? 12);
+    const dailyLimit = Number(process.env.DAILY_UPLOAD_URL_LIMIT ?? 120);
+    try {
+      await this.client.send(new TransactWriteCommand({ TransactItems: [
+        { Update: {
+          TableName: this.tableName,
+          Key: this.sessionKey(sessionId),
+          UpdateExpression: "SET uploadUrlCount = if_not_exists(uploadUrlCount, :zero) + :one",
+          ConditionExpression: "attribute_exists(PK) AND (attribute_not_exists(uploadUrlCount) OR uploadUrlCount < :sessionLimit)",
+          ExpressionAttributeValues: { ":zero": 0, ":one": 1, ":sessionLimit": sessionLimit },
+        } },
+        { Update: {
+          TableName: this.tableName,
+          Key: { PK: `RATE#${dateKey}`, SK: "UPLOAD_URLS" },
+          UpdateExpression: "SET uploadUrlCount = if_not_exists(uploadUrlCount, :zero) + :one, #ttl = :ttl",
+          ConditionExpression: "attribute_not_exists(uploadUrlCount) OR uploadUrlCount < :dailyLimit",
+          ExpressionAttributeNames: { "#ttl": "ttl" },
+          ExpressionAttributeValues: { ":zero": 0, ":one": 1, ":dailyLimit": dailyLimit, ":ttl": dayTtl },
+        } },
+      ] }));
+    } catch {
+      const refreshed = await this.getSession(sessionId);
+      if ((refreshed?.uploadUrlCount ?? sessionLimit) >= sessionLimit) throw new Error("UPLOAD_SESSION_LIMIT");
+      throw new Error("DAILY_UPLOAD_LIMIT");
+    }
+    const countResult = await this.client.send(new GetCommand({
+      TableName: this.tableName,
+      Key: { PK: `RATE#${dateKey}`, SK: "UPLOAD_URLS" },
+    }));
+    return { sessionCount: session.uploadUrlCount + 1, dayCount: Number(countResult.Item?.uploadUrlCount ?? 1) };
   }
 
   async saveWaitlistLead(lead: WaitlistLead): Promise<"CREATED" | "EXISTING"> {

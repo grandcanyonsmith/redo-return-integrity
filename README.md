@@ -26,6 +26,17 @@ OpenAI may extract and compare evidence, surface contradictions and exculpatory 
 2. **Impossible reverse logistics:** deterministic distance/time and scan-order checks, followed by a synthetic staffed receipt, carrier trace, or human review. New evidence supersedes rather than deletes the prior decision.
 3. **Managed physical return:** calibrated weight, exterior/opening/content images, quantity/SKU/serial comparisons, structured OpenAI image assessment, merchant policy, human decision, shopper contest, and evidence-ready Reclaim boundary.
 
+### AI-assisted Scan Return
+
+The `/intake` workstation extends Redo's publicly documented Scan Return and grading pattern with a four-step, merchant-facing workflow:
+
+1. capture or scan a return label, complete a checksum-verified `RETURN_LABEL` S3 upload, extract only routing identifiers, and resolve an exact label/RMA/order/tracking alias in a dedicated DynamoDB lookup table; image confidence below `0.75` or identifiers that resolve to different records select no record and require manual confirmation;
+2. show the matched synthetic shopper, order, SKU, quantity, explicit requested refund/currency, eligible catalog value, and immutable merchant-policy ID/version/snapshot hash before opening the parcel;
+3. capture the contents and produce strict structured observations for `MATCH`, `EMPTY_BOX`, `DAMAGED_PRODUCT`, `QUANTITY_MISMATCH`, `WRONG_PRODUCT`, `POSSIBLE_IMITATION`, or `INCONCLUSIVE`;
+4. present expected-versus-observed evidence, deterministic refund math, and a neutral email/SMS draft with both images labeled by provenance; then persist an evidence-complete human review before the server will accept a delivery-disabled test-outbox event.
+
+Six package fixtures plus a synthetic label fixture make every branch reproducible without exposing a real shopper or shipping label. The original SKU comparison uses a separate fictional catalog image. The [evidence manifest](apps/web/public/evidence/manifest.json) records the label, catalog reference, match, empty-box, quantity-mismatch, wrong-item, damaged-product, and possible-imitation assets with their roles and available checksums. The browser's camera path uses a 60-second presigned S3 POST whose form policy binds the purpose, exact declared byte length, MIME type, and SHA-256 checksum; completion verifies the immutable S3 version before a purpose-bound evidence ID can reach an MCP tool. A label tool accepts only completed `RETURN_LABEL` evidence, while package analysis accepts only completed `PACKAGE_CONTENTS` evidence; inline image data is not an accepted evidence source. Fresh exact-version preview/model URLs last five minutes and are never stored as evidence. Intake lookup, analysis, drafting, review, and test queueing run through the official SDK-backed stateless Streamable HTTP endpoint at `/api/mcp`; the parallel REST routes remain available for typed integrations. Queueing writes only to a delivery-disabled test outbox, and the prototype never sends a message.
+
 ### The shared decision contract
 
 Every one of the 15 lifecycle checkpoints exposes:
@@ -89,8 +100,9 @@ flowchart LR
   CloudFront -->|/api/* uncached| APIGW[API Gateway HTTP API]
   APIGW --> Lambda[Node.js 22 Lambda]
   Lambda --> Cases[(DynamoDB sessions/cases/events)]
+  Lambda --> Returns[(DynamoDB return lookup/intake)]
   Lambda --> Waitlist[(Separate waitlist table)]
-  Lambda --> Uploads[(24h upload-scaffold bucket)]
+  Lambda --> Uploads[(24h ephemeral upload bucket)]
   Lambda --> Secrets[Secrets Manager]
   Lambda -->|store:false + strict schema| OpenAI[OpenAI Responses API]
   Lambda --> CloudWatch[Logs + alarms]
@@ -105,8 +117,9 @@ flowchart LR
 - Anonymous fixture sessions expire after 24 hours; opted-in waitlist records use a separate table with a 30-day active-retention target. AWS TTL deletion and retained backups may lag per policy.
 - Public model budgets: 30 evaluations/session and 250/day.
 - API/model/schema failure routes to human review, never denial.
+- The return-intake table resolves exact label/RMA/order/tracking aliases without table scans and stores session-scoped inspections, drafts, reviews, completed-evidence metadata, and test-outbox records. Its seeded aliases and profiles are globally keyed synthetic demo data—not tenant-isolated merchant records.
 
-The presigned upload route is intentionally a **scaffold**. It limits declared media to JPEG/PNG/WebP up to 5 MB and targets 24-hour retention, but an object remains “not evidence” until a future finalize-time magic-byte/checksum check exists. Demonstrated image decisions use curated synthetic fixtures.
+The intake upload path is a two-step contract. Presign limits the declared media to JPEG/PNG/WebP up to 5 MiB and marks the object `UPLOAD_URL_ISSUED_NOT_EVIDENCE`. S3 receives a random purpose-scoped key and a one-way session binding, never the raw bearer-like session ID. Completion requires the `x-amz-version-id` returned by S3, reads that exact version, and verifies purpose/session binding, declared and actual size, content type, image magic bytes, S3 checksum, and recomputed SHA-256 before issuing a session-scoped evidence ID. Consuming tools enforce the completed evidence's exact purpose. DynamoDB stores the object key plus immutable version, not an expiring read URL; authorized responses mint a fresh five-minute version-scoped read URL when needed. The upload authorization itself lasts only 60 seconds. The older case-scoped upload route remains a scaffold and is not interchangeable with this intake completion route. Curated synthetic fixtures remain the safest public demonstration path.
 
 Read the [architecture](docs/architecture.md), [data dictionary](docs/data-dictionary.md), [API contract](docs/api.md), and [security/privacy model](docs/security-privacy.md) for details.
 
@@ -118,7 +131,8 @@ apps/web/        React experience for landing, lifecycle, shopper, merchant,
 packages/domain/ checkpoints, evidence filters, deterministic rules, policy,
                  metrics, schemas, and synthetic fixtures
 services/api/    Lambda router, DynamoDB/memory stores, OpenAI Responses API,
-                 Secrets Manager, and upload scaffold
+                 Secrets Manager, verified intake uploads, official MCP SDK tools,
+                 and a delivery-disabled test outbox
 infra/           TypeScript CDK, CloudFormation synth, web publisher, alarms
 docs/            product, lifecycle, math, architecture, deployment, and handoff
 .github/         verification CI only; no automatic deployment or cloud secret
@@ -161,6 +175,7 @@ The stack is pinned to `us-west-2`. It expects an existing Secrets Manager secre
 npm run verify
 npm run diff --workspace @return-integrity/infra
 npm run deploy --workspace @return-integrity/infra
+CONFIRM_SYNTHETIC_SEED=RedoReturnIntegrity-demo npm run seed:demo --workspace @return-integrity/infra
 cd infra && npm run publish:web
 ```
 
@@ -179,11 +194,19 @@ POST /api/cases/{caseId}/checkpoints/{checkpointId}/evaluate
 POST /api/cases/{caseId}/actions
 POST /api/cases/{caseId}/uploads
 GET  /api/cases/{caseId}/evidence/{evidenceId}
+POST /api/uploads/presign
+POST /api/uploads/complete
+POST /api/intake/label-lookup
+POST /api/intake/inspections
+POST /api/intake/communications/draft
+POST /api/intake/reviews
+POST /api/intake/communications/queue
+POST /api/mcp
 GET  /api/metrics
 POST /api/waitlist
 ```
 
-`EVIDENCE_READY`, `QUEUED`, `SUBMITTED`, `ACKNOWLEDGED`, and processor outcome are distinct. This prototype sends no email and submits no dispute.
+`EVIDENCE_READY`, persisted operator review, test-outbox `QUEUED_TEST_OUTBOX`, integration `QUEUED`, `SUBMITTED`, `ACKNOWLEDGED`, and processor outcome are distinct. Package inspections and communication drafts carry model-call audit metadata; each draft carries a SHA-256 of its send-relevant content. A review display label is explicitly unauthenticated and must record `draftDecision:"APPROVE_AS_WRITTEN"` against that exact draft hash, inspection, return, and evidence set. Queueing recomputes and compares the hash before accepting a delivery-disabled outbox record. This prototype sends no email/SMS, executes no refund, and submits no dispute. `/api/mcp` is implemented with the official `@modelcontextprotocol/server` v2 SDK as a stateless Streamable HTTP endpoint for protocol `2026-07-28`; the Lambda adapter returns terminal JSON for current-protocol calls and deliberately disables MCP sessions, resumability, subscriptions, and mid-call notifications.
 
 ## Documentation
 
@@ -194,6 +217,7 @@ The [documentation index](docs/README.md) routes every review question. Core del
 - [Measurement methodology](docs/measurement-methodology.md)
 - [Production implementation plan and time to revenue](docs/implementation-plan.md)
 - [Brand/design extrapolation](docs/brand-design-guide.md)
+- [Redo portal research and product-fit notes](docs/redo-portal-research.md)
 - [Source register](docs/sources.md)
 - [~8-minute Loom storyboard](docs/loom-storyboard.md)
 - [Demo runbook](docs/demo-runbook.md)
@@ -216,8 +240,10 @@ The release checklist prevents a private, stale, or broken owner-view link from 
 - It is a demonstration with a fictional merchant and synthetic fixture cases.
 - Only AWS and OpenAI are designed as live paths; Redo/Shopify/payment/carrier/identity/WMS/Reclaim are typed simulators.
 - A live OpenAI result requires the deployed secret and model access; otherwise the correct behavior is safe review/fallback.
-- The upload presign is not a completed evidence-ingestion pipeline.
-- Anonymous sessions are not production authentication/RBAC.
+- At the documented 2026-08-24 release snapshot, the [release checklist](docs/delivery-checklist.md) records OpenAI provider billing as blocked. Until model access is reverified, camera-image assessments must be described as `SAFE_FALLBACK`, not successful live-model results.
+- Intake upload completion verifies transport and file integrity, but it is not malware scanning, qualified product authentication, or production chain of custody. The case-scoped presign route remains nonfinalized.
+- A presigned upload form remains reusable by its bearer for its 60-second validity window, although its key, exact byte length, MIME type, checksum, metadata, and purpose are fixed. Issuance is limited to 12 policies per session and 120 per UTC day in the demo. Production still needs single-use issuance state, authenticated tenant byte budgets, WAF/anomaly controls, and storage-cost alarms.
+- Anonymous sessions are not production authentication/RBAC. The seeded return aliases and profiles are globally keyed and intentionally synthetic; a production deployment must add Redo SSO/OAuth, tenant-prefixed lookup keys, server-side tenant binding, and role checks across lookup, inspection, review, drafting, and queueing before using merchant data.
 - Market sources are context, not merchant-specific base rates.
 - No prevented-fraud claim, pricing forecast, or `$80M`/`$200M` accounting definition has been validated by Redo.
 - The visual system is an explicitly labeled extrapolation from Redo's public presence, not an official brand kit.

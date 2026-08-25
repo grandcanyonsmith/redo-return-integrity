@@ -1,5 +1,5 @@
 {
-  "fixtureSet": "juniper-circuit-return-integrity-v1",
+  "fixtureSet": "juniper-circuit-return-integrity-v2",
   "createdAt": "2026-08-24T00:00:00Z",
   "synthetic": true,
   "containsPersonalData": false,
@@ -27,6 +27,49 @@
       "role": "warehouse_inspection",
       "scenario": "possible_imitation_and_quantity_mismatch",
       "observedQuantity": 1
+    },
+    {
+      "path": "/evidence/return-label-rma-8821.png",
+      "role": "return_label",
+      "scenario": "label_lookup",
+      "identifiers": {
+        "rma": "RMA-8821",
+        "order": "JC-1042",
+        "tracking": "1Z-REDO-8821"
+      },
+      "sha256": "eac71c78f63616c760fb8a8300fa002213e6f6c5d644ff02e1847964f1c4e1e3"
+    },
+    {
+      "path": "/evidence/catalog-juniper-arc-one.png",
+      "role": "catalog_reference",
+      "scenario": "expected_product",
+      "sku": "JC-ARC-ONE-KIT",
+      "expectedQuantity": 2,
+      "sha256": "eb6d003ca64f48122f39b7857560826ad18db53be6352492ce7e669cf539e714"
+    },
+    {
+      "path": "/evidence/return-quantity-mismatch.png",
+      "role": "warehouse_inspection",
+      "scenario": "quantity_mismatch",
+      "expectedQuantity": 2,
+      "observedQuantity": 1,
+      "sha256": "1a1c77107772a937d7e48dc926f4edab9340b9470141ec0570716da940e56e90"
+    },
+    {
+      "path": "/evidence/return-damaged-product.png",
+      "role": "warehouse_inspection",
+      "scenario": "damaged_product",
+      "expectedQuantity": 2,
+      "observedQuantity": 2,
+      "sha256": "c8a02581eebb06f730ad1ab169ef028adb302de3bebb2d2c933f8b5886a2695d"
+    },
+    {
+      "path": "/evidence/return-matching-contents.png",
+      "role": "warehouse_inspection",
+      "scenario": "match",
+      "expectedQuantity": 2,
+      "observedQuantity": 2,
+      "sha256": "d4d9e593066e6d54e79c88ae893de56cfb33f854838da16aa682e3fe6022860f"
     }
   ]
 }

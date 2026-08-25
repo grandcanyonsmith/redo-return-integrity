@@ -40,11 +40,16 @@ Do not mark complete from an authenticated-owner view. Test each exact URL in a 
 - [ ] no final denial without explicit human record;
 - [ ] appeal supersedes and preserves prior decision;
 - [ ] `EVIDENCE_READY != SUBMITTED` in UI/state;
-- [ ] upload scaffold allows only JPEG, PNG, WebP; ≤5 MB; and explicitly says presigned objects are not evidence pending finalization/magic-byte verification;
+- [ ] upload path allows only JPEG, PNG, WebP ≤5 MiB; uses a 60-second exact-byte/checksum POST; requires S3 version completion; rejects cross-purpose evidence; preserves first-completion provenance; exposes no inline image source; and mints only fresh 300-second exact-version preview/model URLs;
+- [ ] image-label confidence below `0.75` selects no record, and identifiers resolving to different records fail closed rather than selecting one;
+- [ ] return lookup visibly separates requested refund/currency from eligible catalog value and exposes the policy ID, policy version, and verified snapshot SHA-256 used by deterministic refund math;
+- [ ] inspection and draft outputs carry model audit metadata; draft carries `contentSha256`; review requires `draftDecision:"APPROVE_AS_WRITTEN"` against the exact context/evidence/hash; queue recomputes the hash and persists it in the delivery-disabled outbox;
+- [ ] a second session cannot read another session's completed evidence/inspection/draft/review/outbox; separately disclose that the five globally keyed return profiles and twenty aliases are synthetic fixtures, not proof of tenant isolation;
 - [ ] waitlist requires consent, persists/dedupes, and sends no email;
 - [ ] responsive at 390px, 768px, and desktop; keyboard/focus/reduced-motion checked;
 - [ ] CloudWatch shows no unexpected errors/throttles or sensitive logs;
 - [ ] OpenAI session/day budgets are enforced.
+- [ ] upload-policy budgets (12/session and 120/day) are enforced without reset bypass.
 
 ## Notion acceptance
 

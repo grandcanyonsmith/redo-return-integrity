@@ -57,12 +57,13 @@ export class ReturnIntegrityStack extends Stack {
       enforceSSL: true,
       objectOwnership: s3.ObjectOwnership.BUCKET_OWNER_ENFORCED,
       removalPolicy: dataRemovalPolicy,
+      versioned: true,
       cors: [
         {
           allowedHeaders: ['content-type', 'x-amz-checksum-sha256', 'x-amz-meta-*'],
-          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT],
+          allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.POST, s3.HttpMethods.PUT],
           allowedOrigins: ['*'],
-          exposedHeaders: ['etag', 'x-amz-checksum-sha256'],
+          exposedHeaders: ['etag', 'x-amz-checksum-sha256', 'x-amz-version-id'],
           maxAge: 300,
         },
       ],
@@ -78,6 +79,19 @@ export class ReturnIntegrityStack extends Stack {
     });
 
     const caseTable = new dynamodb.Table(this, 'CaseSessionEventTable', {
+      partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
+      sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+      timeToLiveAttribute: 'ttl',
+      removalPolicy: dataRemovalPolicy,
+    });
+
+    // Durable synthetic lookup data is isolated from short-lived demo sessions.
+    // Alias items provide deterministic label/RMA/order/tracking lookups without
+    // requiring a broad scan or trusting a model-generated identifier.
+    const returnLookupTable = new dynamodb.Table(this, 'ReturnLookupTable', {
       partitionKey: { name: 'PK', type: dynamodb.AttributeType.STRING },
       sortKey: { name: 'SK', type: dynamodb.AttributeType.STRING },
       billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
@@ -119,6 +133,9 @@ export class ReturnIntegrityStack extends Stack {
       logGroup: apiLogGroup,
       tracing: lambda.Tracing.ACTIVE,
       bundling: {
+        // Include auxiliary AWS SDK packages such as s3-presigned-post instead
+        // of assuming the Lambda runtime ships every modular helper package.
+        bundleAwsSDK: true,
         minify: true,
         sourceMap: true,
         sourcesContent: false,
@@ -129,6 +146,7 @@ export class ReturnIntegrityStack extends Stack {
         CASE_TABLE_NAME: caseTable.tableName,
         CASES_TABLE_NAME: caseTable.tableName,
         WAITLIST_TABLE_NAME: waitlistTable.tableName,
+        RETURN_LOOKUP_TABLE_NAME: returnLookupTable.tableName,
         UPLOAD_BUCKET_NAME: uploadBucket.bucketName,
         OPENAI_SECRET_NAME: 'OPENAI_API_KEY',
         OPENAI_PRIMARY_MODEL: 'gpt-5.6-terra',
@@ -139,6 +157,8 @@ export class ReturnIntegrityStack extends Stack {
         UPLOAD_TTL_HOURS: '24',
         MAX_EVALUATIONS_PER_SESSION: '30',
         DAILY_EVALUATION_LIMIT: '250',
+        MAX_UPLOAD_URLS_PER_SESSION: '12',
+        DAILY_UPLOAD_URL_LIMIT: '120',
         DEMO_MODE: 'true',
       },
     });
@@ -153,8 +173,16 @@ export class ReturnIntegrityStack extends Stack {
       'dynamodb:TransactWriteItems',
     );
     waitlistTable.grant(apiFunction, 'dynamodb:PutItem');
+    returnLookupTable.grant(
+      apiFunction,
+      'dynamodb:GetItem',
+      'dynamodb:PutItem',
+      'dynamodb:UpdateItem',
+      'dynamodb:Query',
+      'dynamodb:TransactWriteItems',
+    );
     apiFunction.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['s3:GetObject', 's3:PutObject'],
+      actions: ['s3:GetObject', 's3:GetObjectVersion', 's3:PutObject'],
       resources: [uploadBucket.arnForObjects('ephemeral/*')],
     }));
     openAiSecret.grantRead(apiFunction);
@@ -189,6 +217,21 @@ export class ReturnIntegrityStack extends Stack {
     });
 
     const apiDomain = `${api.apiId}.execute-api.${this.region}.${this.urlSuffix}`;
+    // Rewrite extensionless application routes at the web behavior boundary.
+    // Distribution-wide 403/404 custom errors must not be used for an SPA:
+    // they would also turn API authorization/not-found responses into a 200
+    // index document and hide the server's fail-closed status from clients.
+    const spaRewriteFunction = new cloudfront.Function(this, 'SpaRewriteFunction', {
+      runtime: cloudfront.FunctionRuntime.JS_2_0,
+      code: cloudfront.FunctionCode.fromInline(`function handler(event) {
+  var request = event.request;
+  var lastSegment = request.uri.split('/').pop();
+  if (request.uri.endsWith('/') || !lastSegment || lastSegment.indexOf('.') === -1) {
+    request.uri = '/index.html';
+  }
+  return request;
+}`),
+    });
     const browserSecurityHeaders = new cloudfront.ResponseHeadersPolicy(this, 'BrowserSecurityHeaders', {
       comment: 'CSP and browser hardening for the public synthetic Return Integrity demo.',
       securityHeadersBehavior: {
@@ -242,6 +285,12 @@ export class ReturnIntegrityStack extends Stack {
         cachePolicy: cloudfront.CachePolicy.CACHING_OPTIMIZED,
         compress: true,
         responseHeadersPolicy: browserSecurityHeaders,
+        functionAssociations: [
+          {
+            function: spaRewriteFunction,
+            eventType: cloudfront.FunctionEventType.VIEWER_REQUEST,
+          },
+        ],
       },
       additionalBehaviors: {
         'api/*': {
@@ -256,10 +305,6 @@ export class ReturnIntegrityStack extends Stack {
           responseHeadersPolicy: browserSecurityHeaders,
         },
       },
-      errorResponses: [
-        { httpStatus: 403, responseHttpStatus: 200, responsePagePath: '/index.html', ttl: Duration.seconds(0) },
-        { httpStatus: 404, responseHttpStatus: 200, responsePagePath: '/index.html', ttl: Duration.seconds(0) },
-      ],
       enableIpv6: true,
       httpVersion: cloudfront.HttpVersion.HTTP2_AND_3,
       priceClass: cloudfront.PriceClass.PRICE_CLASS_100,
@@ -310,6 +355,7 @@ export class ReturnIntegrityStack extends Stack {
     new CfnOutput(this, 'ApiEndpoint', { value: api.apiEndpoint });
     new CfnOutput(this, 'CaseTableName', { value: caseTable.tableName });
     new CfnOutput(this, 'WaitlistTableName', { value: waitlistTable.tableName });
+    new CfnOutput(this, 'ReturnLookupTableName', { value: returnLookupTable.tableName });
     new CfnOutput(this, 'OpenAiSecretName', { value: 'OPENAI_API_KEY' });
   }
 }

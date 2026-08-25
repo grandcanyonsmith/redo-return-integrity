@@ -1,6 +1,7 @@
-import { useMutation } from '@tanstack/react-query'
-import { AlertTriangle, Bot, Box, Camera, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, FileCheck2, LoaderCircle, PackageOpen, Ruler, ScanBarcode, Scale, ShieldCheck, Upload, Warehouse } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Bot, Box, Camera, Check, CheckCircle2, ChevronLeft, ChevronRight, ClipboardCheck, LoaderCircle, PackageOpen, Ruler, ScanBarcode, Scale, ShieldCheck, Upload, Warehouse } from 'lucide-react'
 import { useState } from 'react'
+import { LiveDecisionOutput } from '../components/LiveDecisionOutput'
 import { Badge, PageIntro } from '../components/ui'
 import { checkpoints, formatStatus, type DemoState } from '../domain'
 import { evaluateCheckpoint } from '../lib/api'
@@ -28,7 +29,10 @@ export function OperatorPage() {
   const [finding, setFinding] = useState<DemoState['physicalFinding']>(state.physicalFinding)
   const [operatorConfirmed, setOperatorConfirmed] = useState(false)
   const inspectionCheckpoint = checkpoints.find((point) => point.id === 'ITEM_INSPECTION')!
-  const assessment = useMutation({ mutationFn: () => evaluateCheckpoint(inspectionCheckpoint, { ...state, physicalFinding: finding }) })
+  const assessment = useQuery({
+    queryKey: ['evaluate-checkpoint', inspectionCheckpoint.id, finding],
+    queryFn: () => evaluateCheckpoint(inspectionCheckpoint, { ...state, physicalFinding: finding }),
+  })
 
   const finalize = () => {
     if (!operatorConfirmed) return
@@ -73,7 +77,7 @@ export function OperatorPage() {
           <span className="eyebrow">OPERATOR FINDING</span>
           <h2>What was physically observed?</h2>
           <div className="finding-options" role="radiogroup" aria-label="Inspection finding">
-            {(['empty', 'decoy', 'wrong-item', 'possible-imitation', 'quantity-mismatch', 'inconclusive'] as const).map((option) => <button role="radio" aria-checked={finding === option} className={finding === option ? 'active' : ''} key={option} onClick={() => { setFinding(option); setOperatorConfirmed(false); assessment.reset() }}><span>{finding === option ? <Check /> : null}</span>{formatStatus(option)}</button>)}
+            {(['empty', 'decoy', 'wrong-item', 'possible-imitation', 'quantity-mismatch', 'inconclusive'] as const).map((option) => <button role="radio" aria-checked={finding === option} className={finding === option ? 'active' : ''} key={option} onClick={() => { setFinding(option); setOperatorConfirmed(false) }}><span>{finding === option ? <Check /> : null}</span>{formatStatus(option)}</button>)}
           </div>
           <div className="operator-observation"><Box aria-hidden="true" /><div><strong>Structured observation</strong><p>{finding === 'empty' ? 'No merchandise observed after a complete six-frame unpacking sequence. Outer packaging and RMA label are present. Expected quantity 2 cameras; observed quantity 0.' : `${formatStatus(finding)} selected. This finding remains an operator observation until confirmed and routed to merchant review.`}</p></div></div>
           <label className="checkbox-label checkbox-label--boxed"><input type="checkbox" checked={operatorConfirmed} onChange={(event) => setOperatorConfirmed(event.target.checked)} /><span>I completed the required capture protocol and confirm this describes what I observed. I am not making the refund decision.</span></label>
@@ -81,8 +85,17 @@ export function OperatorPage() {
         </div>
 
         <div className="vision-panel">
-          <header><span><Bot aria-hidden="true" /><strong>OpenAI vision support</strong></span>{assessment.data ? <Badge tone={assessment.data.mode === 'live' ? 'green' : assessment.data.mode === 'unavailable' ? 'orange' : 'violet'}>{assessment.data.mode === 'live' ? 'LIVE OPENAI' : assessment.data.mode === 'unavailable' ? 'MODEL UNAVAILABLE' : 'SIMULATED FALLBACK'}</Badge> : <Badge tone="neutral">NOT RUN</Badge>}</header>
-          {!assessment.data ? <div className="vision-empty"><div className="vision-empty__scan"><Camera aria-hidden="true" /></div><h3>Compare images with the order record</h3><p>The model can describe contents, count visible items, read labels, compare form factors, and cite frames. It cannot declare fraud or execute a refund decision.</p><button className="button button--secondary" disabled={assessment.isPending} onClick={() => assessment.mutate()}>{assessment.isPending ? <LoaderCircle className="spin" /> : <Bot />} {assessment.isPending ? 'Analyzing evidence…' : 'Run multimodal assessment'}</button></div> : <div className="vision-result"><div className="vision-result__headline"><AlertTriangle aria-hidden="true" /><div><small>RECOMMENDATION ONLY</small><h3>{assessment.data.recommendation.replaceAll('_', ' ')}</h3></div></div><p>{assessment.data.summary}</p><div className="vision-result__facts"><span><strong>Quantity visible</strong>0 of 2</span><span><strong>Serials legible</strong>No</span><span><strong>Image sufficiency</strong>Complete</span></div><small><FileCheck2 size={13} /> Evidence: {assessment.data.evidenceIds.join(', ')} · No action executed</small></div>}
+          <header>
+            <span><Bot aria-hidden="true" /><strong>OpenAI vision support</strong></span>
+            {assessment.data
+              ? <Badge tone={assessment.data.mode === 'live' ? 'green' : assessment.data.mode === 'unavailable' ? 'orange' : 'violet'}>{assessment.data.mode === 'live' ? 'LIVE OPENAI' : assessment.data.mode === 'unavailable' ? 'MODEL UNAVAILABLE' : 'SIMULATED FALLBACK'}</Badge>
+              : <Badge tone="neutral">{assessment.isFetching ? 'RUNNING' : 'NOT RUN'}</Badge>}
+          </header>
+          <LiveDecisionOutput assessment={assessment.data} pending={assessment.isFetching} />
+          <button className="button button--secondary" disabled={assessment.isFetching} onClick={() => assessment.refetch()}>
+            {assessment.isFetching ? <LoaderCircle className="spin" /> : <Bot />}
+            {assessment.isFetching ? 'Analyzing evidence…' : 'Refresh multimodal assessment'}
+          </button>
         </div>
       </section>
 

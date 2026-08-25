@@ -1,5 +1,6 @@
 import { AlertCircle, ArrowRight, Check, CheckCircle2, Clock3, CreditCard, FileUp, Headphones, MailCheck, PackageOpen, ReceiptText, RefreshCw, ShieldCheck, Smartphone, Upload, UserCheck, X } from 'lucide-react'
 import { useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Badge, EmptyNotice, PageIntro } from '../components/ui'
 import { formatStatus } from '../domain'
 import { useDemo } from '../lib/demo-context'
@@ -84,7 +85,15 @@ export function ShopperPage() {
       {tab === 'appeal' ? (
         <section className="journey-layout" aria-label="Shopper contest and appeal">
           <article className="shopper-task">
-            {state.physical !== 'denied' && state.physical !== 'appealed' && state.physical !== 'evidence-ready' ? <EmptyNotice icon={ShieldCheck} title="No adverse decision to contest">A shopper appeal becomes available only after an authorized merchant reviewer makes an adverse decision. The model cannot create one.</EmptyNotice> : <>
+            {state.physical !== 'denied' && state.physical !== 'appealed' && state.physical !== 'evidence-ready' ? (
+              <EmptyNotice
+                icon={ShieldCheck}
+                title="No adverse decision to contest"
+                actions={<Link className="button button--secondary button--small" to="/merchant">Open merchant console</Link>}
+              >
+                A shopper appeal becomes available only after an authorized merchant reviewer makes an adverse decision. The model cannot create one.
+              </EmptyNotice>
+            ) : <>
               <header className="shopper-task__header"><span className="status-orb">!</span><div><Badge tone={state.physical === 'appealed' ? 'blue' : 'orange'}>{state.physical === 'appealed' ? 'SECOND REVIEW PENDING' : '48-HOUR CONTEST WINDOW'}</Badge><h2>{state.physical === 'appealed' ? 'Your evidence is preserved.' : 'Tell us what we may have missed'}</h2></div></header>
               <p>Juniper Circuit’s reviewer found no Arc One camera kit in the returned parcel. You can correct the record before the refund decision becomes final.</p>
               <label className="field-label">Your explanation<textarea rows={5} value={appealText} disabled={state.physical === 'appealed'} onChange={(event) => setAppealText(event.target.value)} /></label>

@@ -8,6 +8,7 @@ import {
   DecisionActorSchema,
   DecisionTargetSchema,
   EvidenceArtifactSchema,
+  IntakeEvidencePurposeSchema,
   appendActionEvent,
   attachHumanDecision,
   checkpointById,
@@ -27,7 +28,26 @@ import {
 import { assessWithOpenAI, DEFAULT_OPENAI_MODEL, OPENAI_PROMPT_VERSION, simulateAssessment } from "./openai.js";
 import { resolveOpenAIKey } from "./secrets.js";
 import { createStoreFromEnvironment, type DataStore, type WaitlistLead } from "./store.js";
-import { createUploadUrl, getEvidenceObjectUrl } from "./uploads.js";
+import {
+  completeIntakeUpload,
+  createIntakeUploadUrl,
+  createUploadUrl,
+  getEvidenceObjectUrl,
+} from "./uploads.js";
+import {
+  ReturnIntakeService,
+  type ReturnIntakeServiceOptions,
+} from "./intake-service.js";
+import {
+  MemoryReturnIntakeStore,
+  createReturnIntakeStoreFromEnvironment,
+  type ReturnIntakeStore,
+} from "./intake-store.js";
+import {
+  MCP_PROTOCOL_VERSION,
+  MCP_VERIFIED_SESSION_HEADER,
+  createReturnIntakeMcpHandler,
+} from "./mcp.js";
 
 type Result = APIGatewayProxyStructuredResultV2;
 
@@ -66,10 +86,24 @@ const waitlistBodySchema = z.object({
   noticeVersion: z.string().min(1).max(50),
 });
 
-const parseJson = (event: APIGatewayProxyEventV2): unknown => {
+const intakeUploadBodySchema = z.object({
+  purpose: IntakeEvidencePurposeSchema,
+  mimeType: z.enum(["image/jpeg", "image/png", "image/webp"]),
+  sizeBytes: z.number().int().positive().max(5 * 1024 * 1024),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/i),
+});
+
+const completeIntakeUploadBodySchema = z.object({
+  purpose: IntakeEvidencePurposeSchema,
+  objectKey: z.string().min(1).max(1_024),
+  versionId: z.string().trim().min(1).max(1_024),
+  sha256: z.string().regex(/^[a-f0-9]{64}$/i),
+});
+
+const parseJson = (event: APIGatewayProxyEventV2, maxBytes = 100_000): unknown => {
   if (!event.body) return {};
   const body = event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
-  if (Buffer.byteLength(body, "utf8") > 100_000) throw new Error("REQUEST_TOO_LARGE");
+  if (Buffer.byteLength(body, "utf8") > maxBytes) throw new Error("REQUEST_TOO_LARGE");
   return JSON.parse(body);
 };
 
@@ -96,8 +130,8 @@ const corsHeaders = (origin: string | undefined): Record<string, string> => {
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
-    "access-control-allow-methods": "GET,POST,OPTIONS",
-    "access-control-allow-headers": "content-type,x-demo-session",
+    "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",
+    "access-control-allow-headers": "content-type,x-demo-session,mcp-protocol-version,mcp-method,mcp-name,mcp-session-id,last-event-id",
     "access-control-max-age": "600",
     vary: "Origin",
   };
@@ -114,6 +148,46 @@ const response = (
   origin?: string,
   cookies?: string[],
 ): Result => ({ statusCode, headers: corsHeaders(origin), cookies, body: JSON.stringify(payload) });
+
+const eventBodyText = (event: APIGatewayProxyEventV2): string | undefined => {
+  if (event.body === undefined) return undefined;
+  return event.isBase64Encoded ? Buffer.from(event.body, "base64").toString("utf8") : event.body;
+};
+
+const mcpWebRequest = (
+  event: APIGatewayProxyEventV2,
+  verifiedSessionId: string,
+): Request => {
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(event.headers)) {
+    if (value !== undefined) headers.set(name, value);
+  }
+  headers.set(MCP_VERIFIED_SESSION_HEADER, verifiedSessionId);
+  const query = event.rawQueryString ? `?${event.rawQueryString}` : "";
+  const url = `https://${event.requestContext.domainName || "lambda.invalid"}${event.rawPath}${query}`;
+  const method = event.requestContext.http.method;
+  const body = ["GET", "HEAD"].includes(method) ? undefined : eventBodyText(event);
+  return new Request(url, { method, headers, ...(body === undefined ? {} : { body }) });
+};
+
+const mcpGatewayResponse = async (
+  sdkResponse: Response,
+  origin: string | undefined,
+): Promise<Result> => {
+  const headers = corsHeaders(origin);
+  sdkResponse.headers.forEach((value, name) => {
+    // API Gateway owns hop-by-hop transfer framing. Forwarding these headers
+    // can corrupt an otherwise valid buffered Streamable HTTP response.
+    if (!["connection", "content-length", "transfer-encoding"].includes(name.toLowerCase())) {
+      headers[name] = value;
+    }
+  });
+  return {
+    statusCode: sdkResponse.status,
+    headers,
+    body: await sdkResponse.text(),
+  };
+};
 
 const cookieValue = (event: APIGatewayProxyEventV2, name: string): string | undefined => {
   for (const cookie of event.cookies ?? []) {
@@ -144,8 +218,13 @@ const statusForError = (error: unknown): { status: number; code: string; message
   const code = error instanceof Error ? error.message : "INTERNAL_ERROR";
   if (code === "SESSION_NOT_FOUND") return { status: 401, code, message: "Create or refresh an anonymous demo session." };
   if (["SESSION_EVALUATION_LIMIT", "DAILY_EVALUATION_LIMIT"].includes(code)) return { status: 429, code, message: "The bounded demo model-evaluation limit has been reached." };
+  if (["UPLOAD_SESSION_LIMIT", "DAILY_UPLOAD_LIMIT"].includes(code)) return { status: 429, code, message: "The bounded demo upload-policy limit has been reached." };
   if (code.endsWith("NOT_FOUND")) return { status: 404, code, message: "The requested resource was not found in this demo session." };
-  if (["REQUEST_TOO_LARGE", "UNSUPPORTED_UPLOAD_TYPE", "UPLOAD_SIZE_LIMIT", "INVALID_UPLOAD_CHECKSUM"].includes(code)) return { status: 400, code, message: "The request failed a safety or size constraint." };
+  if (["REQUEST_TOO_LARGE", "UNSUPPORTED_UPLOAD_TYPE", "UPLOAD_SIZE_LIMIT", "UPLOAD_SIZE_MISMATCH", "UPLOAD_MAGIC_BYTES_MISMATCH", "INVALID_UPLOAD_CHECKSUM", "UPLOAD_VERSION_REQUIRED", "UPLOAD_VERSION_MISMATCH", "UPLOAD_PURPOSE_MISMATCH"].includes(code)) return { status: 400, code, message: "The request failed a safety, immutable-version, image-validation, or size constraint." };
+  if (["UPLOAD_SESSION_MISMATCH", "EVIDENCE_PURPOSE_MISMATCH"].includes(code)) return { status: 403, code, message: "The evidence does not belong to this session and required purpose." };
+  if (["COMMUNICATION_NOT_RECOMMENDED", "RECIPIENT_NOT_AVAILABLE"].includes(code)) return { status: 409, code, message: "The requested communication action is not available for this record." };
+  if (["REVIEW_CONTEXT_MISMATCH", "REVIEW_EVIDENCE_MISMATCH"].includes(code)) return { status: 409, code, message: "The operator review is not bound to this exact draft, inspection, and evidence set." };
+  if (code === "EVIDENCE_CONTEXT_MISMATCH") return { status: 409, code, message: "An immutable evidence identifier already exists with a different context." };
   if (code.includes("requires") || code.includes("must") || code.includes("referenced") || code.includes("unknown evidence")) return { status: 409, code: "DECISION_INVARIANT", message: code };
   return { status: 500, code: "INTERNAL_ERROR", message: "The request could not be completed safely." };
 };
@@ -273,14 +352,51 @@ const physicalScenarioEvidence = (
   ];
 };
 
-export const createHandler = (providedStore?: DataStore) => async (
-  event: APIGatewayProxyEventV2,
-): Promise<Result> => {
+export interface HandlerDependencies {
+  intakeStore?: ReturnIntakeStore;
+  resolveOpenAIKey?: () => Promise<string | undefined>;
+  fetchImpl?: typeof fetch;
+  model?: string;
+  publicBaseUrl?: string;
+  now?: () => Date;
+  resolveEvidenceImage?: ReturnIntakeServiceOptions["resolveEvidenceImage"];
+  acquireModelSlot?: ReturnIntakeServiceOptions["acquireModelSlot"];
+}
+
+export const createHandler = (providedStore?: DataStore, dependencies: HandlerDependencies = {}) => {
+  const dataStore = providedStore ?? createStoreFromEnvironment();
+  const intakeStore = dependencies.intakeStore
+    ?? (providedStore ? new MemoryReturnIntakeStore() : createReturnIntakeStoreFromEnvironment());
+  const resolveEvidenceImage = dependencies.resolveEvidenceImage ?? (async (
+    sessionId: string,
+    evidenceId: string,
+    expectedPurpose: "RETURN_LABEL" | "PACKAGE_CONTENTS",
+  ) => {
+    const evidence = await intakeStore.getCompletedEvidence(sessionId, evidenceId);
+    if (evidence && evidence.purpose !== expectedPurpose) throw new Error("EVIDENCE_PURPOSE_MISMATCH");
+    return evidence ? getEvidenceObjectUrl(evidence.objectKey, evidence.versionId) : undefined;
+  });
+  const intakeService = new ReturnIntakeService({
+    store: intakeStore,
+    resolveApiKey: dependencies.resolveOpenAIKey ?? resolveOpenAIKey,
+    fetchImpl: dependencies.fetchImpl,
+    model: dependencies.model,
+    publicBaseUrl: dependencies.publicBaseUrl ?? process.env.PUBLIC_BASE_URL,
+    now: dependencies.now,
+    resolveEvidenceImage,
+    acquireModelSlot: dependencies.acquireModelSlot
+      ?? ((sessionId: string) => dataStore.acquireEvaluationSlot(sessionId)),
+  });
+  const mcpHandler = createReturnIntakeMcpHandler(intakeService);
+
+  return async (
+    event: APIGatewayProxyEventV2,
+  ): Promise<Result> => {
   const origin = event.headers.origin;
   if (!isOriginAllowed(origin)) return response(403, { error: { code: "ORIGIN_NOT_ALLOWED", message: "This origin is not allowed." } }, undefined);
   if (event.requestContext.http.method === "OPTIONS") return response(204, {}, origin);
 
-  const store = providedStore ?? createStoreFromEnvironment();
+  const store = dataStore;
   const method = event.requestContext.http.method;
   const path = pathFor(event);
 
@@ -292,6 +408,12 @@ export const createHandler = (providedStore?: DataStore) => async (
         model: DEFAULT_OPENAI_MODEL,
         openAIConfigured: Boolean(process.env.OPENAI_API_KEY || process.env.OPENAI_SECRET_NAME),
         persistence: process.env.CASE_TABLE_NAME || process.env.CASES_TABLE_NAME || process.env.TABLE_NAME ? "dynamodb" : "memory-demo",
+        returnLookupPersistence: process.env.RETURN_LOOKUP_TABLE_NAME ? "dynamodb" : "memory-demo",
+        intakeUploadCompletion: Boolean(process.env.UPLOAD_BUCKET_NAME),
+        mcpSurface: "official-sdk-stateless-streamable-http",
+        mcpProtocolVersion: MCP_PROTOCOL_VERSION,
+        mcpSessions: false,
+        mcpResponseMode: "terminal-json",
         policy: "human-final-adverse-decisions",
       }, origin);
     }
@@ -346,6 +468,53 @@ export const createHandler = (providedStore?: DataStore) => async (
     }
     if (method === "GET" && path === "/metrics") {
       return response(200, { metrics: demoMetrics, illustrative: true }, origin);
+    }
+
+    if (method === "POST" && path === "/uploads/presign") {
+      const body = intakeUploadBodySchema.parse(parseJson(event));
+      if (process.env.UPLOAD_BUCKET_NAME) await store.acquireUploadUrlSlot(sessionId);
+      return response(201, await createIntakeUploadUrl(sessionId, body.purpose, body), origin);
+    }
+
+    if (method === "POST" && path === "/uploads/complete") {
+      const body = completeIntakeUploadBodySchema.parse(parseJson(event));
+      const completed = await completeIntakeUpload(sessionId, body);
+      const persistedEvidence = await intakeStore.putCompletedEvidence(sessionId, completed.evidence);
+      return response(201, {
+        status: "VERIFIED_INTAKE_EVIDENCE",
+        ...completed,
+        evidence: persistedEvidence,
+        expiresInSeconds: 300,
+      }, origin);
+    }
+
+    if (method === "POST" && path === "/intake/label-lookup") {
+      const result = await intakeService.lookupReturnByLabel(sessionId, parseJson(event, 7_500_000));
+      return response(200, result, origin);
+    }
+
+    if (method === "POST" && path === "/intake/inspections") {
+      const result = await intakeService.analyzeReturnContents(sessionId, parseJson(event, 7_500_000));
+      return response(201, result, origin);
+    }
+
+    if (method === "POST" && path === "/intake/communications/draft") {
+      const result = await intakeService.draftReturnCommunication(sessionId, parseJson(event));
+      return response(201, result, origin);
+    }
+
+    if (method === "POST" && path === "/intake/reviews") {
+      const result = await intakeService.recordReturnReview(sessionId, parseJson(event));
+      return response(201, result, origin);
+    }
+
+    if (method === "POST" && path === "/intake/communications/queue") {
+      const result = await intakeService.queueTestCommunication(sessionId, parseJson(event));
+      return response(202, result, origin);
+    }
+
+    if (path === "/mcp") {
+      return mcpGatewayResponse(await mcpHandler.fetch(mcpWebRequest(event, sessionId)), origin);
     }
 
     const caseMatch = path.match(/^\/cases\/([^/]+)$/);
@@ -510,7 +679,12 @@ export const createHandler = (providedStore?: DataStore) => async (
       if (!caseData) throw new Error("CASE_NOT_FOUND");
       const artifact = caseData.evidence.find((candidate) => candidate.evidenceId === decodeURIComponent(evidenceMatch[2]!));
       if (!artifact) throw new Error("EVIDENCE_NOT_FOUND");
-      const objectUrl = artifact.objectKey ? await getEvidenceObjectUrl(artifact.objectKey) : undefined;
+      const objectVersionId = typeof artifact.facts.objectVersionId === "string"
+        ? artifact.facts.objectVersionId
+        : undefined;
+      const objectUrl = artifact.objectKey && objectVersionId
+        ? await getEvidenceObjectUrl(artifact.objectKey, objectVersionId)
+        : undefined;
       return response(200, { evidence: artifact, previewUrl: objectUrl ?? artifact.fixtureUrl, expiresInSeconds: objectUrl ? 300 : undefined }, origin);
     }
 
@@ -520,6 +694,7 @@ export const createHandler = (providedStore?: DataStore) => async (
     if (mapped.status >= 500) console.error(JSON.stringify({ event: "request_failed", path, code: mapped.code }));
     return response(mapped.status, { error: { code: mapped.code, message: mapped.message } }, origin);
   }
+  };
 };
 
 export const handler = createHandler();

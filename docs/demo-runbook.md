@@ -16,6 +16,7 @@ Prove three end-to-end claims:
 - call `/api/health` through CloudFront, not the direct API URL;
 - confirm CloudFront/API headers and no mixed content;
 - confirm live/fallback model badge accurately reflects current OpenAI path;
+- in Return intake, verify the structured output includes model audit metadata and never call `SAFE_FALLBACK` a successful provider result;
 - check Lambda errors/throttles/latency and daily budget;
 - test reset in one private window and isolation in a second;
 - submit only a controlled waitlist test address; confirm “no email sent” copy;
@@ -26,7 +27,10 @@ Prove three end-to-end claims:
 
 - merchant: Juniper Circuit, fictional high-AOV electronics;
 - all shopper/order/carrier/payment/warehouse/payment-dispute data: synthetic;
-- all demonstrated decision evidence imagery: synthetic fixtures; the local file picker/presign route is a non-evidence scaffold only;
+- all built-in imagery is synthetic; the optional camera path becomes session-scoped demo evidence only after exact-version checksum, purpose, MIME-signature, size, and magic-byte completion succeeds;
+- the upload POST authorization lasts 60 seconds; any evidence preview/model URL is separately minted for 300 seconds against the exact completed version and is never persisted;
+- nonfixture tools accept no inline image source: label lookup requires completed `RETURN_LABEL` evidence and package analysis requires completed `PACKAGE_CONTENTS` evidence;
+- the five return profiles and twenty exact aliases are globally keyed synthetic fixtures. Anonymous sessions isolate captured evidence and downstream work, but the seed lookup is not tenant authorization and must never contain real merchant/shopper data;
 - Shopify, payment, carrier, identity, WMS, and Reclaim: typed simulators;
 - OpenAI: live only when server secret/model request succeeds; otherwise safe fallback;
 - no refund, denial, email, ID verification, chargeback, or processor submission occurs outside the demo state.
@@ -79,15 +83,17 @@ Start: Operator → RMA fixture.
 Expected sequence:
 
 1. confirm calibrated scale/protocol/device labels;
-2. capture/select exterior, opening, contents, quantity/serial views;
-3. choose empty, decoy/wrong, quantity mismatch, or inconclusive branch;
-4. evaluate;
-5. show exact evidence references and missing information;
-6. open Merchant and compare model recommendation with policy;
-7. request evidence/hold/review or perform clearly labeled human decision;
-8. show shopper cure/deadline;
-9. appeal/new evidence supersedes the decision where demonstrated;
-10. show evidence packet state as `EVIDENCE_READY`, never submitted.
+2. open **Return intake** and scan the synthetic label; show that confidence must be at least `0.75`, conflicting aliases select no record, and the matched record separates requested refund/currency from eligible catalog value with policy ID/version/snapshot hash;
+3. capture/select exterior, opening, contents, quantity/serial views; nonfixture package capture must first complete as `PACKAGE_CONTENTS` evidence;
+4. choose empty, decoy/wrong, quantity mismatch, or inconclusive branch and evaluate;
+5. show exact evidence references, missing information, strict structured output, and model audit metadata;
+6. show deterministic recommendation math capped at the lower of requested refund and eligible total;
+7. generate a `DRAFT_NOT_SENT` communication and compare catalog reference with warehouse provenance; show its `contentSha256`;
+8. record `APPROVE_AS_WRITTEN` with all acknowledgments and the exact evidence set, then queue only to `QUEUED_TEST_OUTBOX`; show the same draft hash and `deliveryDisabled:true`;
+9. open Merchant and compare model recommendation with policy; request evidence/hold/review or perform clearly labeled human decision;
+10. show shopper cure/deadline;
+11. appeal/new evidence supersedes the decision where demonstrated;
+12. show evidence packet state as `EVIDENCE_READY`, never submitted.
 
 Acceptance:
 
@@ -96,6 +102,9 @@ Acceptance:
 - operator is not primed with an accusation;
 - final denial requires explicit human rationale/evidence/appeal;
 - money tiles distinguish held, verified stopped, recovered, and protected.
+- cross-purpose evidence is rejected before a model call, and no inline image field can bypass completion;
+- the reviewer display label is described as unauthenticated rather than identity proof;
+- queueing fails if draft content, hash, context, or evidence binding changes.
 
 ## Evaluation lab
 
@@ -116,7 +125,9 @@ Say explicitly: “These figures do not represent verified Redo revenue or a for
 |---|---|
 | OpenAI key missing/API timeout | fallback badge; deterministic evidence remains; human review; no denial |
 | evaluation quota | clear `429`/limit message; state preserved |
-| upload scaffold input invalid | reject and list allowed JPEG/PNG/WebP + 5 MB; a successful presign still must say “not evidence” |
+| upload input/purpose/version invalid | reject and list allowed JPEG/PNG/WebP + 5 MB; a successful 60-second presign remains “not evidence” until exact-version completion; cross-purpose consumption is rejected; 300-second previews are read-only and exact-version scoped |
+| label confidence `<0.75` or identifiers point to different records | select no return; show warning and manual-confirmation path |
+| draft/review hash or evidence context mismatch | reject queueing; preserve `DRAFT_NOT_SENT`; no contact side effect |
 | offline/API down | UI visibly says preview/fallback; no waitlist saved |
 | duplicate waitlist | idempotent accepted/already-recorded response; no email |
 | stale session | create/reset session; never expose another session |

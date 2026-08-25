@@ -13,6 +13,7 @@ Start with the [product specification](./product-spec.md), then use the source t
 | [Security and privacy](./security-privacy.md) | data classes, threat model, identity/OpenAI boundaries, retention, production gates |
 | [Implementation plan](./implementation-plan.md) | phases, workstreams, pilot gates, backlog, RACI, time to revenue |
 | [Brand/design guide](./brand-design-guide.md) | explicitly extrapolated tokens, components, copy, responsive/accessibility rules |
+| [Redo portal research](./redo-portal-research.md) | official public shopper, merchant, warehouse, and API UI/workflow evidence plus observable limits |
 | [Sources](./sources.md) | public evidence and qualifications versus scenario inputs |
 | [AWS deployment](./deployment.md) | secret-safe manual CDK deploy, publish, smoke, rollback, teardown |
 | [Loom storyboard](./loom-storyboard.md) | timed ~8-minute narrative and exact demo beats |
@@ -28,3 +29,4 @@ Start with the [product specification](./product-spec.md), then use the source t
 - A score, allegation, nonresponse, or hold is not ground truth or prevented fraud.
 - OpenAI never owns final adverse action.
 - `EVIDENCE_READY` never means submitted to a card processor.
+- Anonymous sessions isolate session artifacts, but the globally keyed seeded return aliases/profiles are synthetic-only and do not demonstrate production tenant authorization.

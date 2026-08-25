@@ -1,11 +1,27 @@
-import { useMutation } from '@tanstack/react-query'
-import { ArrowRight, Bot, Check, Database, FileCheck2, Gavel, LoaderCircle, RefreshCw, Route, Shield, UserCheck } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { ArrowRight, Bot, Database, Gavel, LoaderCircle, RefreshCw, Route, Shield, UserCheck } from 'lucide-react'
 import { checkpointScope, type Checkpoint, type DecisionStep } from '../domain'
 import { useDemo } from '../lib/demo-context'
-import { evaluateCheckpoint } from '../lib/api'
+import { evaluateCheckpoint, type Assessment } from '../lib/api'
 import { Badge } from './ui'
+import { LiveDecisionOutput } from './LiveDecisionOutput'
 
 const stepIcons = [Database, Route, Bot, Shield, Gavel, UserCheck, ArrowRight]
+
+function overlaySteps(checkpoint: Checkpoint, live?: Assessment): DecisionStep[] {
+  const base = [checkpoint.facts, checkpoint.signals, checkpoint.assessment, checkpoint.policy, checkpoint.action, checkpoint.cure, checkpoint.next]
+  if (!live) return base
+  const risk = live.signals.filter((signal) => signal.riskBearing && signal.status === 'OBSERVED')
+  return [
+    { ...base[0], detail: Object.keys(live.nativeFacts).length ? Object.entries(live.nativeFacts).slice(0, 4).map(([key, value]) => `${key}: ${typeof value === 'object' ? '…' : String(value)}`).join(' · ') : base[0].detail },
+    { ...base[1], detail: risk.length ? risk.map((signal) => signal.label ?? signal.code).join(' · ') : (live.signals.length ? 'No risk-bearing signal fired.' : base[1].detail), tone: risk.length ? 'warn' : 'good' },
+    { ...base[2], detail: live.summary, tone: 'ai' },
+    { ...base[3], detail: live.policy?.explanation ?? base[3].detail },
+    { ...base[4], detail: live.accountableAction ? `${live.accountableAction.action.replaceAll('_', ' ')} · ${live.accountableAction.actor?.replaceAll('_', ' ') ?? 'policy'}` : base[4].detail, tone: 'warn' },
+    { ...base[5], detail: live.shopperCure[0]?.label ?? base[5].detail, tone: 'good' },
+    { ...base[6], detail: live.nextState?.replaceAll('_', ' ') ?? base[6].detail },
+  ]
+}
 
 function PipelineStep({ step, index }: { step: DecisionStep; index: number }) {
   const Icon = stepIcons[index]
@@ -22,8 +38,11 @@ function PipelineStep({ step, index }: { step: DecisionStep; index: number }) {
 
 export function DecisionPipeline({ checkpoint, compact = false }: { checkpoint: Checkpoint; compact?: boolean }) {
   const { state } = useDemo()
-  const evaluation = useMutation({ mutationFn: () => evaluateCheckpoint(checkpoint, state) })
-  const steps = [checkpoint.facts, checkpoint.signals, checkpoint.assessment, checkpoint.policy, checkpoint.action, checkpoint.cure, checkpoint.next]
+  const evaluation = useQuery({
+    queryKey: ['evaluate-checkpoint', checkpoint.id, state.physicalFinding],
+    queryFn: () => evaluateCheckpoint(checkpoint, state),
+  })
+  const steps = overlaySteps(checkpoint, evaluation.data)
   return (
     <article className={`decision-card ${compact ? 'decision-card--compact' : ''}`} data-testid={`checkpoint-${checkpoint.id}`}>
       <header className="decision-card__header">
@@ -35,36 +54,21 @@ export function DecisionPipeline({ checkpoint, compact = false }: { checkpoint: 
               <Badge tone="neutral">{checkpointScope(checkpoint.number)}</Badge>
               <Badge tone={checkpoint.evidenceTier === 'E4' || checkpoint.evidenceTier === 'E5' ? 'orange' : 'blue'}>{checkpoint.evidenceTier} evidence</Badge>
               <Badge tone="violet">{checkpoint.coverage}</Badge>
+              {evaluation.data ? <Badge tone={evaluation.data.mode === 'live' ? 'green' : evaluation.data.mode === 'unavailable' ? 'orange' : 'violet'}>{evaluation.data.mode === 'live' ? 'LIVE OPENAI' : evaluation.data.mode === 'unavailable' ? 'MODEL UNAVAILABLE' : 'SIMULATED FALLBACK'}</Badge> : null}
             </div>
             <h2>{checkpoint.label}</h2>
             <p>{checkpoint.decision}</p>
           </div>
         </div>
-        {!compact ? (
-          <button className="button button--secondary button--small" onClick={() => evaluation.mutate()} disabled={evaluation.isPending}>
-            {evaluation.isPending ? <LoaderCircle className="spin" aria-hidden="true" size={16} /> : <Bot aria-hidden="true" size={16} />}
-            {evaluation.isPending ? 'Assessing…' : 'Run assessment'}
-          </button>
-        ) : null}
+        <button className="button button--secondary button--small" onClick={() => evaluation.refetch()} disabled={evaluation.isFetching}>
+          {evaluation.isFetching ? <LoaderCircle className="spin" aria-hidden="true" size={16} /> : evaluation.data?.mode === 'live' ? <RefreshCw aria-hidden="true" size={16} /> : <Bot aria-hidden="true" size={16} />}
+          {evaluation.isFetching ? 'Assessing…' : 'Refresh live output'}
+        </button>
       </header>
       <ol className="decision-pipeline" aria-label={`Decision contract for ${checkpoint.label}`}>
         {steps.map((step, index) => <PipelineStep key={step.title} step={step} index={index} />)}
       </ol>
-      {evaluation.data ? (
-        <div className={`assessment-result assessment-result--${evaluation.data.mode}`} role="status">
-          <span className="assessment-result__icon">
-            {evaluation.data.mode === 'live' ? <Check aria-hidden="true" size={18} /> : <RefreshCw aria-hidden="true" size={18} />}
-          </span>
-          <div>
-            <div className="assessment-result__title">
-              <strong>{evaluation.data.recommendation.replaceAll('_', ' ')}</strong>
-              <Badge tone={evaluation.data.mode === 'live' ? 'green' : evaluation.data.mode === 'unavailable' ? 'orange' : 'violet'}>{evaluation.data.mode === 'live' ? 'LIVE OPENAI' : evaluation.data.mode === 'unavailable' ? 'MODEL UNAVAILABLE' : 'SIMULATED FALLBACK'}</Badge>
-            </div>
-            <p>{evaluation.data.summary}</p>
-            <small><FileCheck2 size={13} aria-hidden="true" /> Evidence: {evaluation.data.evidenceIds.join(', ') || 'none cited'} · Recommendation only — no action executed.</small>
-          </div>
-        </div>
-      ) : null}
+      <LiveDecisionOutput assessment={evaluation.data} pending={evaluation.isFetching} compact={compact} />
     </article>
   )
 }

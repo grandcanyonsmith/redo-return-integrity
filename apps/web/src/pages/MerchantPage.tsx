@@ -1,19 +1,16 @@
+import { useQuery } from '@tanstack/react-query'
 import {
   AlertTriangle,
   ArrowDownRight,
   ArrowRight,
   ArrowUpRight,
-  Bot,
   Check,
   CheckCircle2,
   ChevronRight,
   Clock3,
-  FileCheck2,
   FileText,
   Gavel,
   Link2,
-  PackageOpen,
-  PauseCircle,
   RefreshCw,
   Search,
   ShieldAlert,
@@ -24,8 +21,10 @@ import {
   XCircle,
 } from 'lucide-react'
 import { useMemo, useState } from 'react'
-import { Badge, MetricCard, PageIntro } from '../components/ui'
-import { formatStatus, outcomeMetrics } from '../domain'
+import { LiveDecisionOutput } from '../components/LiveDecisionOutput'
+import { Badge, EmptyNotice, MetricCard, PageIntro } from '../components/ui'
+import { checkpoints, formatStatus, outcomeMetrics } from '../domain'
+import { evaluateCheckpoint } from '../lib/api'
 import { useDemo } from '../lib/demo-context'
 
 const cases = [
@@ -45,6 +44,11 @@ export function MerchantPage() {
   const [certified, setCertified] = useState(false)
   const selected = cases.find((item) => item.id === selectedId) ?? cases[0]
   const visibleCases = useMemo(() => cases.filter((item) => `${item.id} ${item.order} ${item.shopper} ${item.type}`.toLowerCase().includes(query.toLowerCase())), [query])
+  const inspectionCheckpoint = checkpoints.find((point) => point.id === 'ITEM_INSPECTION')!
+  const liveEvaluation = useQuery({
+    queryKey: ['evaluate-checkpoint', inspectionCheckpoint.id, selectedId, state.physicalFinding],
+    queryFn: () => evaluateCheckpoint(inspectionCheckpoint, state),
+  })
 
   const finalize = () => {
     if (!decision || !certified || !note.trim()) return
@@ -65,22 +69,40 @@ export function MerchantPage() {
 
       <div className="case-workspace">
         <aside className="case-queue">
-          <header><div><span className="eyebrow">CASE QUEUE</span><h2>Needs attention <b>3</b></h2></div><button aria-label="Queue settings">•••</button></header>
-          <label className="searchbox"><Search size={16} aria-hidden="true" /><input placeholder="Search returns" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
+          <header><div><span className="eyebrow">CASE QUEUE</span><h2>Needs attention <b>{visibleCases.length}</b></h2></div><button aria-label="Queue settings">•••</button></header>
+          <label className="searchbox"><Search size={16} aria-hidden="true" /><input placeholder="Search returns" aria-label="Search returns" value={query} onChange={(event) => setQuery(event.target.value)} /></label>
           <div className="queue-filters"><button className="active">All 12</button><button>Review 3</button><button>Appeals 1</button></div>
           <div className="case-list">
-            {visibleCases.map((item) => (
+            {visibleCases.length ? visibleCases.map((item) => (
               <button key={item.id} className={selectedId === item.id ? 'case-row case-row--active' : 'case-row'} onClick={() => setSelectedId(item.id)}>
                 <img src={item.image} alt="" />
                 <span className="case-row__copy"><small>{item.id} · {item.updated} ago</small><strong>{item.type}</strong><span>{item.order} · {item.shopper}</span></span>
                 <span className="case-row__amount">{item.amount}<Badge tone={item.score === 'High' ? 'red' : 'orange'}>{item.score}</Badge></span>
                 <ChevronRight size={16} aria-hidden="true" />
               </button>
-            ))}
+            )) : (
+              <EmptyNotice
+                icon={Search}
+                title="No returns match"
+                actions={<button type="button" className="button button--secondary button--small" onClick={() => setQuery('')}>Clear search</button>}
+              >
+                Nothing in this queue matches “{query}”. Try an RMA, order, shopper, or finding type.
+              </EmptyNotice>
+            )}
           </div>
         </aside>
 
-        <section className="case-detail">
+        <section className={`case-detail${visibleCases.length ? '' : ' case-detail--empty'}`}>
+          {!visibleCases.length ? (
+            <EmptyNotice
+              icon={Search}
+              title="Select a matching return"
+              actions={<button type="button" className="button button--secondary button--small" onClick={() => setQuery('')}>Clear search</button>}
+            >
+              The queue has no cases for this search. Clear it to continue reviewing evidence, policy, and the accountable decision.
+            </EmptyNotice>
+          ) : (
+            <>
           <header className="case-detail__header">
             <div><div className="decision-card__badges"><Badge tone="orange">{selected.type.toUpperCase()}</Badge><Badge tone="violet">SYNTHETIC FIXTURE</Badge><Badge tone="neutral">{state.physical === 'inspection-hold' ? 'REFUND HELD' : formatStatus(state.physical).toUpperCase()}</Badge></div><h2>{selected.id} <span>· Order {selected.order}</span></h2><p>{selected.shopper} · Juniper Arc One 2-camera field kit</p></div>
             <div className="case-detail__amount"><small>Refund requested</small><strong>{selected.amount}.00</strong></div>
@@ -102,9 +124,11 @@ export function MerchantPage() {
             </div>
           </div>
 
+          <LiveDecisionOutput assessment={liveEvaluation.data} pending={liveEvaluation.isFetching} />
+
           <div className="decision-separation">
-            <article className="decision-separation__ai"><header><span><Bot aria-hidden="true" /><strong>OpenAI assessment</strong></span><Badge tone="violet">SIMULATED FALLBACK</Badge></header><h3>Likely empty return <span>0.93</span></h3><p>No retail item is visible across the complete unpacking sequence. Packaging and label appear consistent with RMA-8821. Imitation is not assessable because no product is present.</p><small><FileCheck2 size={13} /> Cites EV-12-WEIGHT, EV-13-FRAMES-01–06, EV-13-SERIAL</small></article>
-            <article className="decision-separation__policy"><header><span><ShieldCheck aria-hidden="true" /><strong>Merchant policy · v3.4</strong></span><Badge tone="blue">DETERMINISTIC</Badge></header><h3>Manual review required</h3><p>Return value over $500 plus material weight mismatch plus complete inspection protocol. Hold remains reversible for 48 hours after adverse notice.</p><small><Link2 size={13} /> Policy RET-HV-04 · Published Jul 1, 2026</small></article>
+            <article className="decision-separation__policy"><header><span><ShieldCheck aria-hidden="true" /><strong>Merchant policy · v3.4</strong></span><Badge tone="blue">DETERMINISTIC</Badge></header><h3>{liveEvaluation.data?.policy?.action?.replaceAll('_', ' ') ?? 'Manual review required'}</h3><p>{liveEvaluation.data?.policy?.explanation ?? 'Return value over $500 plus material weight mismatch plus complete inspection protocol. Hold remains reversible for 48 hours after adverse notice.'}</p><small><Link2 size={13} /> Policy {liveEvaluation.data?.policy?.policyId ?? 'RET-HV-04'} · {liveEvaluation.data?.policyVersion ?? 'v3.4'}</small></article>
+            <article className="decision-separation__human-note"><header><span><UserCheck aria-hidden="true" /><strong>Human remains final</strong></span><Badge tone="orange">ACCOUNTABLE</Badge></header><h3>Model cannot execute this outcome</h3><p>The live chain above is a recommendation. Approve, partial, request, or deny is recorded as your decision with evidence, policy, and a shopper cure.</p><small>Actor: {liveEvaluation.data?.accountableAction?.actor?.replaceAll('_', ' ') ?? 'SYSTEM POLICY'}</small></article>
           </div>
 
           <div className="human-decision">
@@ -122,6 +146,8 @@ export function MerchantPage() {
           {(state.physical === 'denied' || state.physical === 'evidence-ready') ? (
             <section className="reclaim-card"><div className="reclaim-card__icon"><ShieldCheck /></div><div><Badge tone="dark">REDO RECLAIM HANDOFF</Badge><h3>{state.physical === 'evidence-ready' ? 'Evidence ready — not submitted' : 'Contest window is open'}</h3><p>The versioned evidence bundle is prepared for an authorized inquiry, alert, or dispute workflow. Preparing evidence does not mean it was submitted or won.</p><div className="reclaim-card__meta"><span><Check /> 9 artifacts checksummed</span><span><Check /> Policy + reviewer history</span><span><Check /> Shopper notice preserved</span></div></div><button className="button button--ghost-light" disabled={state.physical === 'evidence-ready'} onClick={() => update({ physical: 'evidence-ready' })}>{state.physical === 'evidence-ready' ? 'Ready · not submitted' : 'Advance demo timer'} <ArrowRight size={16} /></button></section>
           ) : null}
+            </>
+          )}
         </section>
       </div>
 

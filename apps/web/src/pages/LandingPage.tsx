@@ -42,7 +42,7 @@ export function LandingPage() {
           <h1>Catch the return.<br /><em>Keep the customer.</em></h1>
           <p className="hero__lede">A decision and evidence layer that helps Redo prevent empty-box, decoy, wrong-item, imitation, and quantity fraud — while giving every good shopper a clear path forward.</p>
           <div className="hero__actions">
-            <Link className="button button--primary" to="/merchant">Enter merchant console <ArrowRight aria-hidden="true" size={17} /></Link>
+            <Link className="button button--primary" to="/">Open operations dashboard <ArrowRight aria-hidden="true" size={17} /></Link>
             <Link className="button button--ghost-light" to="/lifecycle">Explore 15 checkpoints <GitBranch aria-hidden="true" size={17} /></Link>
           </div>
           <div className="hero__trust">

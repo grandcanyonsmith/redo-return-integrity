@@ -3,10 +3,13 @@ import {
   FlaskConical,
   GitBranch,
   Github,
+  LayoutDashboard,
   Menu,
   PackageCheck,
   RotateCcw,
+  ScanBarcode,
   ShieldCheck,
+  Sparkles,
   Store,
   UserRound,
   Warehouse,
@@ -18,11 +21,13 @@ import { useDemo } from '../lib/demo-context'
 import { Badge } from './ui'
 
 const navigation = [
-  { to: '/lifecycle', label: 'Lifecycle', icon: GitBranch },
-  { to: '/shopper', label: 'Shopper', icon: UserRound },
-  { to: '/merchant', label: 'Merchant', icon: Store },
-  { to: '/operator', label: 'Operator', icon: Warehouse },
-  { to: '/lab', label: 'Evaluation lab', icon: FlaskConical },
+  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/lifecycle', label: 'Lifecycle', icon: GitBranch, end: false },
+  { to: '/shopper', label: 'Shopper', icon: UserRound, end: false },
+  { to: '/merchant', label: 'Merchant', icon: Store, end: false },
+  { to: '/operator', label: 'Operator', icon: Warehouse, end: false },
+  { to: '/intake', label: 'Intake', icon: ScanBarcode, end: false },
+  { to: '/lab', label: 'Lab', icon: FlaskConical, end: false },
 ]
 
 export function Shell() {
@@ -39,8 +44,8 @@ export function Shell() {
           {open ? <X aria-hidden="true" /> : <Menu aria-hidden="true" />}
         </button>
         <nav className={`topnav ${open ? 'topnav--open' : ''}`} aria-label="Product navigation">
-          {navigation.map(({ to, label, icon: Icon }) => (
-            <NavLink key={to} to={to} onClick={() => setOpen(false)} className={({ isActive }) => isActive ? 'topnav__link topnav__link--active' : 'topnav__link'}>
+          {navigation.map(({ to, label, icon: Icon, end }) => (
+            <NavLink key={to} to={to} end={end} onClick={() => setOpen(false)} className={({ isActive }) => isActive ? 'topnav__link topnav__link--active' : 'topnav__link'}>
               <Icon aria-hidden="true" size={16} /> {label}
             </NavLink>
           ))}
@@ -56,6 +61,7 @@ export function Shell() {
         <p><ShieldCheck size={15} aria-hidden="true" /> Models recommend. Policy constrains. People decide adverse outcomes.</p>
         <div className="footer__links">
           <a href="https://github.com/grandcanyonsmith/redo-return-integrity" target="_blank" rel="noreferrer"><Github size={14} aria-hidden="true" /> Source</a>
+          <Link to="/product"><Sparkles size={14} aria-hidden="true" /> Product</Link>
           <Link to="/lifecycle"><PackageCheck size={14} aria-hidden="true" /> 15 checkpoints</Link>
           <Link to="/reset"><RotateCcw size={14} aria-hidden="true" /> Reset demo</Link>
         </div>

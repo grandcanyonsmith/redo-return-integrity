@@ -159,6 +159,7 @@ OpenAI can recommend only `PASS`, `PASS_MONITORED`, `CHALLENGE`, `REQUEST_EVIDEN
 - Each artifact has source, observed/available/received timestamps, checksum where applicable, protocol version, provenance tier, privacy class, and allowed use.
 - Evaluations reject evidence from the future relative to `snapshotAt`.
 - Images retain an immutable original in production; the public demo uses synthetic fixtures or optional short-lived uploads and strips browser EXIF.
+- The implemented intake camera path accepts no inline image source. A nonfixture label or package image must first become completed evidence bound to its exact S3 version and one of two immutable purposes: `RETURN_LABEL` or `PACKAGE_CONTENTS`. Using one purpose in the other tool fails closed.
 - Required warehouse views are visible before an operator completes a protocol.
 - Any model claim references one or more evidence IDs or is marked unsupported.
 
@@ -167,7 +168,10 @@ OpenAI can recommend only `PASS`, `PASS_MONITORED`, `CHALLENGE`, `REQUEST_EVIDEN
 - Deterministic rules execute before model analysis and remain visible.
 - OpenAI receives only the minimum point-in-time evidence required for the checkpoint.
 - Structured output is schema-validated; invalid output or API failure becomes `HUMAN_REVIEW`, never denial.
+- Image label extraction below `0.75` confidence selects no return record; multiple extracted identifiers that resolve to different records likewise select none and require manual confirmation.
+- Return records keep the requested refund and currency separate from catalog eligibility and carry an explicit merchant-policy ID, version, and canonical snapshot SHA-256. The implemented USD single-line adapter verifies the hash and caps any recommendation at the lower of requested and eligible value.
 - Merchant policy versions are immutable after use.
+- Package inspections and communication drafts persist bounded model audit metadata: requested/provider model, prompt/schema version, request ID when available, latency, input/output hashes, provider classification, and `providerStorageRequested:false`.
 - Human decisions include reviewer role, reason code, note, timestamp, and evidence IDs.
 
 ### Shopper fairness
@@ -183,6 +187,7 @@ OpenAI can recommend only `PASS`, `PASS_MONITORED`, `CHALLENGE`, `REQUEST_EVIDEN
 - Only an authorized reviewer role exposes final denial.
 - Operator capture uses a neutral checklist and quality gate.
 - Case timeline shows superseded decisions and evidence availability.
+- The intake prototype's send gate is narrower: a draft is `DRAFT_NOT_SENT`, has a SHA-256 over send-relevant content, and can enter only a delivery-disabled test outbox after a stored `APPROVE_AS_WRITTEN` review matches the exact draft hash, inspection, return, and evidence set. Queueing recomputes the draft hash; it never contacts the shopper.
 
 ### Analytics
 
@@ -193,9 +198,11 @@ OpenAI can recommend only `PASS`, `PASS_MONITORED`, `CHALLENGE`, `REQUEST_EVIDEN
 
 ## Non-functional requirements
 
-- Anonymous demo sessions are isolated with 24-hour TTL and a reset control.
-- The prototype exposes a presigned-upload scaffold for JPEG/PNG/WebP up to 5 MB and a 24-hour lifecycle target, but an uploaded object is explicitly **not decision evidence** because finalize-time magic-byte/checksum validation is not implemented. Demonstrated decisions use curated synthetic fixtures. Production requires browser EXIF removal plus server finalization before evidence creation.
+- Anonymous demo sessions are isolated with 24-hour TTL and a reset control. The five seeded return profiles and twenty exact aliases are a disclosed synthetic-only exception: their keys are global rather than tenant-scoped, so Redo SSO/OAuth, tenant-prefixed lookup keys, RBAC, and downstream tenant binding are mandatory before real merchant data.
+- The prototype exposes a 60-second exact-byte/checksum presigned POST for JPEG/PNG/WebP up to 5 MiB and a 24-hour lifecycle target. An uploaded object is explicitly **not decision evidence** until the server validates the exact immutable S3 version, session/purpose metadata, size, MIME signature, S3 checksum, and recomputed SHA-256. The browser re-encodes camera captures to strip ordinary EXIF metadata. Built-in demonstrations still default to curated synthetic fixtures; production additionally requires malware/polyglot scanning and authenticated custody controls.
+- Authorized evidence previews/model fetches use a separately minted 300-second URL for the exact completed version. The preview URL is never stored, and its five-minute read lifetime must not be confused with the 60-second upload authorization.
 - Maximum 30 model evaluations per session and 250 per UTC day for the public demo.
+- Maximum 12 upload policies per session and 120 per UTC day; policy forms remain replayable during their 60-second lifetime, so production still requires single-use issuance and tenant byte budgets.
 - The OpenAI secret is fetched server-side from AWS Secrets Manager; no key reaches the browser, repository, Lambda environment, logs, or synthesized template.
 - `store: false` is set for OpenAI requests. Prompt injection in an image or text artifact is treated as untrusted evidence, never as an instruction.
 - CloudFront serves a private S3 origin through OAC. `/api/*` is uncached and routed to API Gateway/Lambda.

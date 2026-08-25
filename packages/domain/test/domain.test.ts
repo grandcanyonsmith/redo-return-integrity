@@ -7,14 +7,21 @@ import {
   collectNativeFacts,
   computeIntegrityMetrics,
   deriveDeterministicSignals,
+  deriveInspectionRecommendation,
+  enforceInspectionFindingInvariants,
   errorAssessment,
   estimateRandomizedDeterrence,
   estimateCheckpointOpportunity,
   evaluateCheckpoint,
   evidenceAvailableAt,
   fixtureCaseById,
+  fixtureInspectionFinding,
+  fixtureReturnRecords,
+  OperatorReviewRecordSchema,
   type EvidenceArtifact,
+  type InspectionModelFinding,
   type OpenAIAssessment,
+  type ReturnRecord,
 } from "../src/index.js";
 
 const passAssessment: OpenAIAssessment = {
@@ -265,5 +272,263 @@ describe("measurement math", () => {
         { checkpointId: "CHECKOUT_PAYMENT", exclusiveFraudShare: 0.6, evidenceCoverageRate: 1, predictableShare: 1, interventionSuccessRate: 1 },
       ],
     })).toThrow(/double count/);
+  });
+});
+
+describe("return intake recommendations", () => {
+  const returnRecord = fixtureReturnRecords[0]!;
+
+  it("computes full and quantity-based partial cents deterministically", () => {
+    const full = deriveInspectionRecommendation({
+      returnRecord,
+      finding: fixtureInspectionFinding(
+        "matchReturn",
+        returnRecord.product.quantity,
+        "ev-matchReturn",
+        returnRecord.product.serials,
+      ),
+    });
+    expect(full).toMatchObject({
+      nextAction: "APPROVE_FULL",
+      refund: {
+        recommendedType: "FULL",
+        recommendedAmountCents: 184_900,
+        withholdAmountCents: 0,
+        requiresHumanApproval: true,
+      },
+    });
+
+    const partial = deriveInspectionRecommendation({
+      returnRecord,
+      finding: fixtureInspectionFinding("quantityMismatch", returnRecord.product.quantity),
+    });
+    expect(partial).toMatchObject({
+      nextAction: "APPROVE_PARTIAL",
+      refund: {
+        recommendedType: "PARTIAL",
+        recommendedAmountCents: 92_450,
+        withholdAmountCents: 92_450,
+        requiresHumanApproval: true,
+      },
+    });
+  });
+
+  it("downgrades every classification whose semantic fields contradict it", () => {
+    const matching = fixtureInspectionFinding(
+      "matchReturn",
+      returnRecord.product.quantity,
+      "ev-matchReturn",
+      returnRecord.product.serials,
+    );
+    const empty = fixtureInspectionFinding("emptyReturn", returnRecord.product.quantity);
+    const quantity = fixtureInspectionFinding("quantityMismatch", returnRecord.product.quantity);
+    const wrong = fixtureInspectionFinding("wrongItem", returnRecord.product.quantity);
+    const damaged = fixtureInspectionFinding("damagedProduct", returnRecord.product.quantity);
+    const imitation = fixtureInspectionFinding("possibleImitation", returnRecord.product.quantity);
+    const adversarial: ReadonlyArray<[string, InspectionModelFinding]> = [
+      ["MATCH with a false SKU comparison", {
+        ...matching,
+        comparison: { ...matching.comparison, skuMatch: false },
+      }],
+      ["MATCH without the required serial assessment or observed serials", {
+        ...matching,
+        observedItems: matching.observedItems.map((item) => ({ ...item, serials: [] })),
+        comparison: { ...matching.comparison, serialMatch: null },
+      }],
+      ["MATCH with unexpected serial evidence", {
+        ...matching,
+        observedItems: matching.observedItems.map((item) => ({ ...item, serials: ["UNEXPECTED-SERIAL"] })),
+      }],
+      ["EMPTY_BOX with a visible item", {
+        ...empty,
+        observedItems: matching.observedItems,
+        comparison: {
+          ...empty.comparison,
+          observedQuantity: returnRecord.product.quantity,
+          quantityMatch: true,
+        },
+      }],
+      ["QUANTITY_MISMATCH at the expected quantity", {
+        ...quantity,
+        observedItems: matching.observedItems,
+        comparison: {
+          ...quantity.comparison,
+          observedQuantity: returnRecord.product.quantity,
+          quantityMatch: true,
+        },
+      }],
+      ["QUANTITY_MISMATCH with the wrong SKU", {
+        ...quantity,
+        comparison: { ...quantity.comparison, skuMatch: false },
+      }],
+      ["QUANTITY_MISMATCH with damaged contents", {
+        ...quantity,
+        observedItems: quantity.observedItems.map((item) => ({ ...item, condition: "DAMAGED" as const })),
+        comparison: { ...quantity.comparison, damageObserved: true },
+      }],
+      ["WRONG_PRODUCT without visible contents", {
+        ...wrong,
+        observedItems: [],
+        comparison: { ...wrong.comparison, observedQuantity: 0, quantityMatch: false },
+      }],
+      ["DAMAGED_PRODUCT without affirmative damage", {
+        ...damaged,
+        observedItems: damaged.observedItems.map((item) => ({ ...item, condition: "USED" as const })),
+        comparison: { ...damaged.comparison, damageObserved: false },
+      }],
+      ["POSSIBLE_IMITATION without a visible item", {
+        ...imitation,
+        observedItems: [],
+        comparison: { ...imitation.comparison, observedQuantity: 0, quantityMatch: false },
+      }],
+    ];
+
+    for (const [label, finding] of adversarial) {
+      const invariantSafe = enforceInspectionFindingInvariants({ returnRecord, finding });
+      expect(invariantSafe.classification, label).toBe("INCONCLUSIVE");
+      expect(invariantSafe.confidence, label).toBe(0);
+      expect(invariantSafe.summary, label).toContain("internally inconsistent");
+      expect(invariantSafe.missingEvidence.some((reason) => reason.includes("Semantic consistency check")), label).toBe(true);
+      expect(deriveInspectionRecommendation({ returnRecord, finding }), label).toMatchObject({
+        nextAction: "REQUEST_MORE_EVIDENCE",
+        refund: {
+          recommendedType: "NO_RECOMMENDATION",
+          recommendedAmountCents: null,
+          requiresHumanApproval: true,
+        },
+      });
+    }
+  });
+
+  it("rejects return-record quantity drift and disagreement between item rows and observed quantity", () => {
+    const matching = fixtureInspectionFinding(
+      "matchReturn",
+      returnRecord.product.quantity,
+      "ev-matchReturn",
+      returnRecord.product.serials,
+    );
+    const wrongExpected = enforceInspectionFindingInvariants({
+      returnRecord,
+      finding: {
+        ...matching,
+        comparison: { ...matching.comparison, expectedQuantity: returnRecord.product.quantity + 1 },
+      },
+    });
+    expect(wrongExpected).toMatchObject({ classification: "INCONCLUSIVE", confidence: 0 });
+    expect(wrongExpected.missingEvidence.join(" ")).toContain("return record quantity");
+
+    const wrongSum = enforceInspectionFindingInvariants({
+      returnRecord,
+      finding: {
+        ...matching,
+        observedItems: matching.observedItems.map((item) => ({ ...item, quantity: 1 })),
+      },
+    });
+    expect(wrongSum).toMatchObject({ classification: "INCONCLUSIVE", confidence: 0 });
+    expect(wrongSum.missingEvidence.join(" ")).toContain("item-row total");
+  });
+
+  it("keeps possible imitation explicitly unproven and subject to qualified authentication", () => {
+    const invariantSafe = enforceInspectionFindingInvariants({
+      returnRecord,
+      finding: fixtureInspectionFinding("possibleImitation", returnRecord.product.quantity),
+    });
+    expect(invariantSafe.classification).toBe("POSSIBLE_IMITATION");
+    expect(invariantSafe.summary).toContain("does not establish authenticity");
+    expect(invariantSafe.missingEvidence.join(" ")).toContain("cannot prove imitation or counterfeit status");
+  });
+
+  it("caps full, partial, and temporary-hold dollars by both eligibility and the shopper request", () => {
+    const requestedRefundCents = 50_000;
+    const cappedRecord = {
+      ...returnRecord,
+      return: { ...returnRecord.return, requestedRefundCents },
+    } satisfies ReturnRecord;
+
+    const full = deriveInspectionRecommendation({
+      returnRecord: cappedRecord,
+      finding: fixtureInspectionFinding(
+        "matchReturn",
+        cappedRecord.product.quantity,
+        "ev-matchReturn-capped",
+        cappedRecord.product.serials,
+      ),
+    });
+    const partial = deriveInspectionRecommendation({
+      returnRecord: cappedRecord,
+      finding: fixtureInspectionFinding("quantityMismatch", cappedRecord.product.quantity),
+    });
+    const held = deriveInspectionRecommendation({
+      returnRecord: cappedRecord,
+      finding: fixtureInspectionFinding("emptyReturn", cappedRecord.product.quantity),
+    });
+
+    expect(full.refund).toMatchObject({
+      recommendedAmountCents: requestedRefundCents,
+      withholdAmountCents: 0,
+      requiresHumanApproval: true,
+    });
+    expect(partial.refund).toMatchObject({
+      recommendedAmountCents: requestedRefundCents,
+      withholdAmountCents: 0,
+      requiresHumanApproval: true,
+    });
+    expect(held.refund).toMatchObject({
+      recommendedAmountCents: null,
+      withholdAmountCents: requestedRefundCents,
+      requiresHumanApproval: true,
+    });
+  });
+
+  it("uses temporary holds without model-generated dollars for empty, wrong, or possibly imitated contents", () => {
+    for (const fixtureId of ["emptyReturn", "wrongItem", "possibleImitation"] as const) {
+      const recommendation = deriveInspectionRecommendation({
+        returnRecord,
+        finding: fixtureInspectionFinding(fixtureId, returnRecord.product.quantity),
+      });
+      expect(recommendation.refund).toMatchObject({
+        recommendedType: "TEMPORARY_HOLD",
+        recommendedAmountCents: null,
+        withholdAmountCents: 184_900,
+        requiresHumanApproval: true,
+      });
+      expect(recommendation.communication.recommended).toBe(true);
+    }
+  });
+
+  it("declines to price damage or inconclusive evidence", () => {
+    for (const fixtureId of ["damagedProduct", "unknown"] as const) {
+      const recommendation = deriveInspectionRecommendation({
+        returnRecord,
+        finding: fixtureInspectionFinding(fixtureId, returnRecord.product.quantity),
+      });
+      expect(recommendation.refund).toMatchObject({
+        recommendedType: "NO_RECOMMENDATION",
+        recommendedAmountCents: null,
+        withholdAmountCents: null,
+        requiresHumanApproval: true,
+      });
+    }
+  });
+
+  it("requires explicit human acknowledgments while labeling demo reviewer identity honestly", () => {
+    const review = OperatorReviewRecordSchema.parse({
+      reviewId: "review-1",
+      inspectionId: "inspection-1",
+      draftId: "draft-1",
+      returnRecordId: "ret-jc-1042",
+      reviewerLabel: "  Warehouse Operator 7  ",
+      reviewerIdentityAssurance: "UNAUTHENTICATED_DISPLAY_LABEL",
+      draftDecision: "APPROVE_AS_WRITTEN",
+      draftContentSha256: "a".repeat(64),
+      acknowledgedRecommendation: true,
+      acknowledgedPolicy: true,
+      acknowledgedEvidence: true,
+      reviewedAt: "2026-08-24T18:00:00.000Z",
+      evidenceIds: ["ev-package-1"],
+    });
+    expect(review.reviewerLabel).toBe("Warehouse Operator 7");
+    expect(review.reviewerIdentityAssurance).toBe("UNAUTHENTICATED_DISPLAY_LABEL");
+    expect(OperatorReviewRecordSchema.safeParse({ ...review, acknowledgedEvidence: false }).success).toBe(false);
   });
 });

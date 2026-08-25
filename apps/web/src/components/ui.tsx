@@ -1,4 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
+import type { ReactNode } from 'react'
+import { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from './ui/empty'
 
 export function Badge({
   children,
@@ -22,14 +24,16 @@ export function PageIntro({
   title,
   description,
   actions,
+  compact = false,
 }: {
   eyebrow: string
   title: React.ReactNode
   description: string
   actions?: React.ReactNode
+  compact?: boolean
 }) {
   return (
-    <header className="page-intro">
+    <header className={`page-intro${compact ? ' page-intro--compact' : ''}`}>
       <div>
         <p className="eyebrow">{eyebrow}</p>
         <h1>{title}</h1>
@@ -60,11 +64,25 @@ export function MetricCard({
   )
 }
 
-export function EmptyNotice({ icon: Icon, title, children }: { icon: LucideIcon; title: string; children: React.ReactNode }) {
+export function EmptyNotice({
+  icon: Icon,
+  title,
+  children,
+  actions,
+}: {
+  icon: LucideIcon
+  title: string
+  children: ReactNode
+  actions?: ReactNode
+}) {
   return (
-    <div className="empty-notice">
-      <span className="empty-notice__icon"><Icon aria-hidden="true" size={22} /></span>
-      <div><strong>{title}</strong><p>{children}</p></div>
-    </div>
+    <Empty>
+      <EmptyHeader>
+        <EmptyMedia variant="icon"><Icon aria-hidden="true" /></EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        <EmptyDescription>{children}</EmptyDescription>
+      </EmptyHeader>
+      {actions ? <EmptyContent>{actions}</EmptyContent> : null}
+    </Empty>
   )
 }

@@ -4,5 +4,6 @@ export * from "./evidence.js";
 export * from "./fixtures.js";
 export * from "./metrics.js";
 export * from "./policy.js";
+export * from "./return-intake.js";
 export * from "./signals.js";
 export * from "./types.js";

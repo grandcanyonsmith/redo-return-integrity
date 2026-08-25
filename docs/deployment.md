@@ -9,8 +9,9 @@ Target: AWS `us-west-2`. Infrastructure is authored in TypeScript CDK and synthe
 - uncached `/api/*` behavior to API Gateway HTTP API;
 - Node.js 22 ARM Lambda bundled from `services/api/src/handler.ts`;
 - DynamoDB session/case/event table with TTL and point-in-time recovery;
+- dedicated DynamoDB return-lookup table with point-in-time recovery for globally keyed synthetic label/RMA/order/tracking aliases plus session-scoped completed evidence, inspections, drafts, reviews, and the test outbox;
 - separate email-hash-keyed waitlist table with 30-day TTL and point-in-time recovery;
-- private upload-scaffold bucket with one-day lifecycle; issued objects remain non-evidence until a future finalize/magic-byte check;
+- private, versioned upload bucket with one-day current/noncurrent-version lifecycle and CORS exposure of `x-amz-version-id`; the older case-scoped presign remains nonfinalized, while intake presign uses a 60-second exact-length/checksum S3 POST policy and `/api/uploads/complete` validates session/purpose binding, immutable version, metadata, size, MIME signature, S3 checksum, and recomputed SHA-256; fresh read/model URLs last 300 seconds and are never persisted;
 - IAM permission to read an existing Secrets Manager secret named `OPENAI_API_KEY`;
 - retained seven-day API log group and CloudWatch error/throttle/latency alarms.
 
@@ -101,6 +102,9 @@ Review at minimum:
 - CloudFront uses OAC, not a public website endpoint;
 - API Lambda secret permission is read-only to `OPENAI_API_KEY`;
 - Lambda has only table/upload access needed by the application;
+- upload IAM includes exact-version reads, upload-bucket versioning is enabled, CORS allows form POST and exposes `x-amz-version-id`, and the Lambda bundle contains the presigned-POST helper;
+- Lambda environment includes the intended 12/session and 120/day upload-policy limits as well as 30/session and 250/day model-evaluation limits;
+- return-profile seed data is visibly synthetic and global; no real merchant/customer record is present and no documentation treats the demo session as tenant authorization;
 - no secret value or personal fixture appears in `cdk.out`;
 - data resources are retained on deletion;
 - API default route rate is 10 requests/second with burst 20.
@@ -122,6 +126,7 @@ Expected outputs:
 - `ApiEndpoint`
 - `CaseTableName`
 - `WaitlistTableName`
+- `ReturnLookupTableName`
 - `OpenAiSecretName`
 
 Capture outputs without secret values:
@@ -133,6 +138,16 @@ aws cloudformation describe-stacks \
   --query 'Stacks[0].Outputs[].{Key:OutputKey,Value:OutputValue}' \
   --output table
 ```
+
+## Seed synthetic return records
+
+After the first deployment that creates `ReturnLookupTableName`, seed the five privacy-safe demo returns and their label/RMA/order/tracking aliases:
+
+```bash
+CONFIRM_SYNTHETIC_SEED=RedoReturnIntegrity-demo npm run seed:demo --workspace @return-integrity/infra
+```
+
+The script resolves only `ReturnLookupTableName` and `ApplicationUrl` from the exact `RedoReturnIntegrity-demo` stack in `us-west-2`, checks the stack's application/stage/data-classification tags, requires the exact confirmation string, and atomically writes 5 profiles plus 20 aliases using only fictional `example.test` contacts. Every profile contains an explicit requested amount/currency and a canonical refund-policy ID/version/snapshot hash. Stable keys make a synthetic-only replay idempotent; the transaction refuses a collision with a non-synthetic record and never scans or deletes the table.
 
 ## Publish the React build
 
@@ -175,8 +190,13 @@ In a browser:
 6. appeal and confirm the prior decision remains in the timeline;
 7. verify `EVIDENCE_READY` is not shown as submitted;
 8. submit a consented test waitlist address and confirm no email is sent;
-9. repeat in a second private window and verify session isolation;
-10. inspect at 390px, 768px, and desktop widths.
+9. open **Return intake**, load the RMA-8821 label fixture, confirm the AWS lookup returns explicit requested refund/currency plus policy ID/version/snapshot hash, and analyze each package fixture; inspect the structured `modelAudit` on an inspection;
+10. with a privacy-safe synthetic image, verify presign returns `formFields` and an opaque purpose-scoped key without the raw session ID; POST the multipart form and confirm S3 exposes a non-`null` `x-amz-version-id`;
+11. complete the upload with that version ID, confirm purpose/checksum/size validation succeeds, confirm `RETURN_LABEL` evidence is rejected by package analysis and `PACKAGE_CONTENTS` evidence is rejected by label lookup, and confirm subsequent inspection/draft views use fresh 300-second read URLs for that same immutable version rather than a persisted URL;
+12. preview a test email, inspect its `modelAudit` and `contentSha256`, persist the evidence-complete demo operator review with `draftDecision:"APPROVE_AS_WRITTEN"`, queue it to the test outbox, and confirm the review/outbox carry the same draft hash while the UI never reports delivery;
+13. call `/api/mcp` with a `2026-07-28` per-request `_meta` envelope plus the required `MCP-Protocol-Version` and `Mcp-Method` headers; run `server/discover`, then `tools/list`, and verify the five documented SDK-registered tool contracts are returned without the removed inline-image field;
+14. repeat in a second private window and verify session/evidence isolation; separately acknowledge that seeded alias/profile lookup is globally available synthetic fixture data and therefore does not demonstrate tenant isolation;
+15. inspect at 390px, 768px, and desktop widths.
 
 Check CloudWatch after the run; do not paste evidence or secret-bearing logs into the deliverables.
 
@@ -207,11 +227,13 @@ This removes the serving/API resources but intentionally retains tables, buckets
 
 ## Known production gaps
 
-- anonymous capability instead of Redo authentication/RBAC;
+- anonymous capability instead of Redo authentication/RBAC; seeded return profiles and aliases are globally keyed synthetic fixtures, so production requires tenant-prefixed lookup keys and tenant binding across lookup/evidence/inspection/draft/review/outbox records;
 - no custom domain or certificate;
 - no WAF/origin-verification header;
+- 60-second presigned upload forms are replayable by their bearer within their fixed key/exact-byte/MIME/checksum/purpose constraints; the demo limits issuance to 12/session and 120/day, but there is no single-use issuance record, authenticated tenant byte budget, or dedicated storage-cost alarm yet;
 - synchronous model path rather than queue/worker/DLQ;
 - no live Shopify/Stripe/carrier/ID/WMS/Reclaim adapters;
-- no upload-finalize/magic-byte path; curated fixtures are the only demonstrated image evidence;
+- the official MCP v2 Streamable HTTP endpoint is deliberately stateless and API-Gateway-buffered: no MCP sessions, resumability, subscriptions, server-to-client streams, or mid-call progress/log notifications; its anonymous demo-session capability is not production MCP OAuth or Redo tenant RBAC;
+- test outbox only; no production email/SMS sender or delivery claim;
 - no security notification target or production SLO;
 - synthetic fixtures and public-demo retention, not merchant data controls.

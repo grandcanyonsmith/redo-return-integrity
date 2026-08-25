@@ -2,7 +2,7 @@ import { AlertTriangle, CheckCircle2, ChevronDown, Filter, Layers3, Network, Shi
 import { useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { DecisionPipeline } from '../components/DecisionPipeline'
-import { Badge, PageIntro } from '../components/ui'
+import { Badge, EmptyNotice, PageIntro } from '../components/ui'
 import { checkpointScope, checkpoints, lifecyclePhases, type Checkpoint } from '../domain'
 
 const tierDescriptions = [
@@ -66,7 +66,15 @@ export function LifecyclePage() {
               {expanded === point.id ? <div className="checkpoint-accordion__body"><DecisionPipeline checkpoint={point} /></div> : null}
             </div>
           ))}
-          {!filtered.length ? <p className="no-results">No checkpoint matches this combination.</p> : null}
+          {!filtered.length ? (
+            <EmptyNotice
+              icon={Filter}
+              title="No checkpoints in this view"
+              actions={<button type="button" className="button button--secondary button--small" onClick={() => { setPhase('All'); setCoverage('All') }}>Reset filters</button>}
+            >
+              No lifecycle checkpoint matches {phase === 'All' ? 'all phases' : phase} and {coverage === 'All' ? 'all coverage' : coverage}. Broaden the filters to see the decision contract.
+            </EmptyNotice>
+          ) : null}
         </section>
       </div>
     </div>

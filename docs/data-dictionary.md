@@ -21,14 +21,41 @@ Primary key: `PK` string + `SK` string. Billing: on-demand. TTL: `ttl`. Point-in
 
 | Entity | `PK` | `SK` | Important attributes | Access pattern |
 |---|---|---|---|---|
-| session | `SESSION#{sessionId}` | `META` | `entity`, `sessionId`, `createdAt`, `expiresAt`, `evaluationCount`, `ttl` | validate capability and limit |
+| session | `SESSION#{sessionId}` | `META` | `entity`, `sessionId`, `createdAt`, `expiresAt`, `evaluationCount`, `uploadUrlCount`, `ttl` | validate capability and per-session model/upload limits |
 | case projection | `SESSION#{sessionId}` | `CASE#{caseId}` | `entity`, `caseData`, `ttl` | list/get current cases in one session |
 | case event | `SESSION#{sessionId}` | `EVENT#{occurredAt}#{eventId}` | `entity`, `event`, `ttl` | append/query ordered audit timeline |
 | daily model counter | `RATE#{yyyy-mm-dd}` | `MODEL_EVALUATIONS` | `evaluationCount`, `ttl` | transactional 250/day guard |
+| daily upload-policy counter | `RATE#{yyyy-mm-dd}` | `UPLOAD_URLS` | `uploadUrlCount`, `ttl` | transactional 120/day presign guard |
 
 Session and day counters are acquired in the same DynamoDB transaction to avoid overspending under concurrency. Session creation transacts the session and synthetic fixture case projections.
 
 The prototype stores a complete `caseData` projection for simple reads. Production should normalize large evidence/decision records or archive artifacts before approaching DynamoDB's item-size limit, while retaining the same public domain contract.
+
+## Return-intake DynamoDB table
+
+The dedicated return-intake table is on-demand, point-in-time-recoverable, and retained. It has two bounded key families:
+
+| Entity | `PK` | `SK` | Important attributes |
+|---|---|---|---|
+| synthetic return profile | `RETURN#{returnRecordId}` | `PROFILE` | merchant/order/customer, one expected item, explicit return request, refund-policy snapshot |
+| exact alias pointer | `LOOKUP#{LABEL\|RMA\|ORDER\|TRACKING}#{normalizedValue}` | `POINTER` | `returnRecordId`, synthetic marker |
+| completed evidence | `SESSION#{sessionId}` | `EVIDENCE#{evidenceId}` | exact purpose, object key, immutable S3 version, MIME, bytes, SHA-256, verified/expiry times |
+| package inspection | `SESSION#{sessionId}` | `INSPECTION#{inspectionId}` | evidence-bound finding, deterministic recommendation, `modelAudit`, TTL |
+| communication draft | `SESSION#{sessionId}` | `DRAFT#{draftId}` | send-relevant content, attachments, `contentSha256`, `modelAudit`, `DRAFT_NOT_SENT`, TTL |
+| operator review | `SESSION#{sessionId}` | `REVIEW#{reviewId}` | exact return/inspection/draft/evidence binding, `APPROVE_AS_WRITTEN`, `draftContentSha256`, acknowledgments, TTL |
+| test outbox | `SESSION#{sessionId}` | `OUTBOX#DRAFT#{draftId}` | review ID, `draftContentSha256`, `QUEUED_TEST_OUTBOX`, `deliveryDisabled:true`, TTL |
+
+The five seeded profiles and twenty alias pointers are globally keyed fictional `example.test` demo data. The anonymous session gates later evidence/inspection/draft/review/outbox records, but it does not tenant-scope profile lookup: a caller that knows a seeded alias can resolve the corresponding synthetic profile. That is acceptable only because every profile is synthetic. Before real merchant data, use authenticated Redo tenant identity, tenant-prefixed return/alias keys, role authorization, and tenant binding on every downstream intake object.
+
+### Return request and policy provenance
+
+The public `ReturnRecord.return` contract contains `reason`, `requestedRefundCents`, three-letter `currency`, `policyId`, `policyVersion`, `policySnapshotSha256`, and status. `requestedRefundCents` is not inferred from catalog value. The storage adapter reconstructs a canonical allowlisted policy snapshot, verifies its SHA-256, and currently fails closed unless the record is one USD return line whose requested amount does not exceed the policy maximum and whose policy enables quantity proration and human approval. Refund math is capped at the lower of requested amount and eligible catalog total.
+
+### Intake evidence and model/draft audit
+
+`CompletedIntakeEvidence.purpose` is exactly `RETURN_LABEL` or `PACKAGE_CONTENTS`. The label tool requires the former and the package/draft path requires the latter. Nonfixture model calls accept only a completed, same-session evidence ID; there is no inline image field. The stable record stores the S3 object key and version ID, while fresh exact-version read URLs expire after 300 seconds and are never persisted as evidence.
+
+`IntakeModelAudit` contains `provider`, `requestedModel`, nullable `providerModel`, `promptVersion`, `schemaName`, nullable provider `requestId`, `latencyMs`, `inputSha256`, nullable `outputSha256`, and literal `providerStorageRequested:false`. Both `PackageInspection` and `CommunicationDraft` carry this record. A draft's `contentSha256` covers the send-relevant channel, recipient, subject, body, and attachment role/source/evidence/provenance fields. `OperatorReviewRecord` copies that hash and can record only `draftDecision:"APPROVE_AS_WRITTEN"`; queueing recomputes the stored draft hash and requires equality among the draft, review, and test-outbox message.
 
 ## Waitlist DynamoDB table
 

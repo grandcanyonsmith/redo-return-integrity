@@ -10,9 +10,13 @@
     "synth": "cdk synth",
     "diff": "cdk diff",
     "deploy": "cdk deploy --require-approval broadening",
-    "publish:web": "bash scripts/publish-web.sh"
+    "publish:web": "bash scripts/publish-web.sh",
+    "seed:demo": "node scripts/seed-demo-return-data.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-cloudformation": "^3.876.0",
+    "@aws-sdk/client-dynamodb": "^3.876.0",
+    "@aws-sdk/lib-dynamodb": "^3.876.0",
     "aws-cdk-lib": "^2.221.0",
     "constructs": "^10.4.2",
     "source-map-support": "^0.5.21"
