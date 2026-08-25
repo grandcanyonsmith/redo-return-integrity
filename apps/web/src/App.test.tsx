@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import App from './App'
@@ -33,6 +33,52 @@ describe('interview demo', () => {
     expect(screen.getAllByText('Native facts').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Shopper cure').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Accountable action').length).toBeGreaterThan(0)
+  })
+
+  it('restores lifecycle deep links and keeps one clear checkpoint selected', async () => {
+    renderAt('/lifecycle?checkpoint=IDENTITY_LINK')
+
+    expect(screen.getByRole('heading', { name: /^identity link$/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /02 identity/i })).toHaveAttribute('aria-current', 'step')
+    expect(screen.getByRole('button', { name: /^purchase$/i })).toHaveAttribute('aria-pressed', 'true')
+    const identityContract = within(screen.getByTestId('checkpoint-IDENTITY_LINK'))
+    expect(identityContract.getByText(/^evidence$/i)).toBeInTheDocument()
+    expect(identityContract.getByText(/^assessment$/i)).toBeInTheDocument()
+    expect(identityContract.getByText(/^decision$/i)).toBeInTheDocument()
+    expect(identityContract.getByText(/^shopper path$/i)).toBeInTheDocument()
+    expect(screen.getByText(/view model rationale, sources, and audit details/i).closest('details')).not.toHaveAttribute('open')
+
+    await userEvent.click(screen.getByRole('button', { name: /^fulfillment$/i }))
+    expect(screen.getByTestId('checkpoint-OUTBOUND_PACK')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /05 pack/i })).toHaveAttribute('aria-current', 'step')
+  })
+
+  it('preserves an active coverage filter while moving between matching checkpoints', async () => {
+    renderAt('/lifecycle')
+    await userEvent.selectOptions(screen.getByLabelText(/coverage/i), 'Managed network')
+    expect(screen.getByText(/no checkpoints in this view/i)).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /^fulfillment$/i }))
+    expect(screen.getByTestId('checkpoint-OUTBOUND_PACK')).toBeInTheDocument()
+    expect(screen.getByLabelText(/coverage/i)).toHaveValue('Managed network')
+    await userEvent.click(screen.getByRole('button', { name: /next receive/i }))
+    expect(screen.getByTestId('checkpoint-WAREHOUSE_RECEIPT')).toBeInTheDocument()
+    expect(screen.getByLabelText(/coverage/i)).toHaveValue('Managed network')
+  })
+
+  it('moves focus into the mobile menu and contains keyboard navigation', async () => {
+    renderAt('/merchant')
+    const toggle = screen.getByRole('button', { name: /open navigation/i })
+    const dashboard = screen.getByRole('link', { name: /^dashboard$/i })
+
+    await userEvent.click(toggle)
+    await waitFor(() => expect(dashboard).toHaveFocus())
+    await userEvent.keyboard('{Shift>}{Tab}{/Shift}')
+    expect(toggle).toHaveFocus()
+    await userEvent.keyboard('{Tab}')
+    expect(dashboard).toHaveFocus()
+    await userEvent.click(screen.getByRole('link', { name: /^merchant$/i }))
+    await waitFor(() => expect(toggle).toHaveFocus())
   })
 
   it('requires a reason and certification before recording a human denial', async () => {
