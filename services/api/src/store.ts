@@ -31,7 +31,7 @@ export interface WaitlistLead {
 
 export interface DataStore {
   createSession(now?: Date): Promise<DemoSession>;
-  getSession(sessionId: string): Promise<DemoSession | undefined>;
+  getSession(sessionId: string, now?: Date): Promise<DemoSession | undefined>;
   resetSession(sessionId: string, now?: Date): Promise<DemoSession>;
   listCases(sessionId: string): Promise<ReturnIntegrityCase[]>;
   getCase(sessionId: string, caseId: string): Promise<ReturnIntegrityCase | undefined>;
@@ -63,14 +63,14 @@ export class MemoryStore implements DataStore {
     return structuredClone(session);
   }
 
-  async getSession(sessionId: string): Promise<DemoSession | undefined> {
+  async getSession(sessionId: string, now = new Date()): Promise<DemoSession | undefined> {
     const session = this.sessions.get(sessionId);
-    if (!session || new Date(session.expiresAt).getTime() <= Date.now()) return undefined;
+    if (!session || new Date(session.expiresAt).getTime() <= now.getTime()) return undefined;
     return structuredClone(session);
   }
 
   async resetSession(sessionId: string, now = new Date()): Promise<DemoSession> {
-    const current = await this.getSession(sessionId);
+    const current = await this.getSession(sessionId, now);
     if (!current) throw new Error("SESSION_NOT_FOUND");
     // Reset only the synthetic case workspace. Security/cost quotas are
     // session-lifetime counters and deliberately cannot be reset by the client.
@@ -178,7 +178,7 @@ export class DynamoStore implements DataStore {
     return session;
   }
 
-  async getSession(sessionId: string): Promise<DemoSession | undefined> {
+  async getSession(sessionId: string, now = new Date()): Promise<DemoSession | undefined> {
     const result = await this.client.send(new GetCommand({ TableName: this.tableName, Key: this.sessionKey(sessionId) }));
     if (!result.Item) return undefined;
     const session: DemoSession = {
@@ -188,12 +188,12 @@ export class DynamoStore implements DataStore {
       evaluationCount: Number(result.Item.evaluationCount ?? 0),
       uploadUrlCount: Number(result.Item.uploadUrlCount ?? 0),
     };
-    if (new Date(session.expiresAt).getTime() <= Date.now()) return undefined;
+    if (new Date(session.expiresAt).getTime() <= now.getTime()) return undefined;
     return session;
   }
 
   async resetSession(sessionId: string, now = new Date()): Promise<DemoSession> {
-    const existing = await this.getSession(sessionId);
+    const existing = await this.getSession(sessionId, now);
     if (!existing) throw new Error("SESSION_NOT_FOUND");
     const existingCases = await this.listCases(sessionId);
     for (const caseData of existingCases) {

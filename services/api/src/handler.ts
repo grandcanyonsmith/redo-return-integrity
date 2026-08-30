@@ -229,9 +229,9 @@ const statusForError = (error: unknown): { status: number; code: string; message
   return { status: 500, code: "INTERNAL_ERROR", message: "The request could not be completed safely." };
 };
 
-const requireSession = async (event: APIGatewayProxyEventV2, store: DataStore): Promise<string> => {
+const requireSession = async (event: APIGatewayProxyEventV2, store: DataStore, now: Date): Promise<string> => {
   const sessionId = sessionIdFor(event);
-  if (!sessionId || !await store.getSession(sessionId)) throw new Error("SESSION_NOT_FOUND");
+  if (!sessionId || !await store.getSession(sessionId, now)) throw new Error("SESSION_NOT_FOUND");
   return sessionId;
 };
 
@@ -365,6 +365,8 @@ export interface HandlerDependencies {
 
 export const createHandler = (providedStore?: DataStore, dependencies: HandlerDependencies = {}) => {
   const dataStore = providedStore ?? createStoreFromEnvironment();
+  const resolveKey = dependencies.resolveOpenAIKey ?? resolveOpenAIKey;
+  const clock = dependencies.now ?? (() => new Date());
   const intakeStore = dependencies.intakeStore
     ?? (providedStore ? new MemoryReturnIntakeStore() : createReturnIntakeStoreFromEnvironment());
   const resolveEvidenceImage = dependencies.resolveEvidenceImage ?? (async (
@@ -378,7 +380,7 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
   });
   const intakeService = new ReturnIntakeService({
     store: intakeStore,
-    resolveApiKey: dependencies.resolveOpenAIKey ?? resolveOpenAIKey,
+    resolveApiKey: resolveKey,
     fetchImpl: dependencies.fetchImpl,
     model: dependencies.model,
     publicBaseUrl: dependencies.publicBaseUrl ?? process.env.PUBLIC_BASE_URL,
@@ -454,7 +456,7 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
       }, origin);
     }
 
-    const sessionId = await requireSession(event, store);
+    const sessionId = await requireSession(event, store, clock());
 
     if (method === "GET" && path === "/session") {
       return response(200, { session: await store.getSession(sessionId) }, origin);
@@ -573,7 +575,7 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
             nativeFacts: facts,
             deterministicSignals: signals,
             imageUrls: body.imageUrls,
-            apiKey: await resolveOpenAIKey(),
+            apiKey: await resolveKey(),
             publicBaseUrl: process.env.PUBLIC_BASE_URL,
           });
       const decision = evaluateCheckpoint({
