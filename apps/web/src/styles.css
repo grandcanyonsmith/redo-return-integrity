@@ -784,6 +784,26 @@ button.upload-zone { width: 100%; }
 .refund-review__human > div { min-width: 0; }
 .refund-review__human h3 { margin: 0 0 5px; font-size: 15px; }
 .refund-review__human p { margin: 0; color: var(--muted); font-size: 12px; line-height: 1.55; }
+.handling-savings { margin-top: 12px; padding: 20px; color: #1f5138; background: var(--green-soft); border: 1px solid #bfe8d4; border-radius: 8px; }
+.handling-savings > header { display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 9px; }
+.handling-savings > header > svg { color: var(--green); }
+.handling-savings header small { font-size: 11px; font-weight: 800; letter-spacing: .07em; }
+.handling-savings header strong { display: block; margin-top: 3px; font-size: 14px; color: #123f2b; line-height: 1.35; }
+.handling-savings__stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; margin: 16px 0 13px; }
+.handling-savings__stats span { padding: 12px; background: rgba(255,255,255,.72); border: 1px solid rgba(22,133,91,.18); border-radius: 5px; }
+.handling-savings__stats small, .handling-savings__stats strong { display: block; }
+.handling-savings__stats small { font-size: 11px; color: #2f6b4f; }
+.handling-savings__stats strong { margin-top: 5px; font-size: 18px; color: #0f3d29; }
+.handling-savings__steps { background: rgba(255,255,255,.55); border: 1px solid rgba(22,133,91,.18); border-radius: 5px; padding: 4px 8px; }
+.handling-savings__steps > div { display: grid; grid-template-columns: 1.7fr .8fr .9fr .8fr; align-items: center; gap: 8px; padding: 7px 4px; font-size: 12px; }
+.handling-savings__steps > div + div { border-top: 1px solid rgba(22,133,91,.14); }
+.handling-savings__head { font-size: 11px; font-weight: 750; color: #2f6b4f; }
+.handling-savings__steps strong { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: #123f2b; }
+.handling-savings__steps .badge { padding: 1px 6px; font-size: 9px; }
+.handling-savings__saved { color: var(--green); font-weight: 700; }
+.handling-savings__cost { color: #8a6d1f; font-weight: 700; }
+.handling-savings__note { margin: 12px 0 0; font-size: 11px; line-height: 1.55; color: #2f6b4f; }
+@media (max-width: 720px) { .handling-savings__stats { grid-template-columns: 1fr; } .handling-savings__steps > div { grid-template-columns: 1fr 1fr; row-gap: 2px; } .handling-savings__head { display: none; } }
 .communication-panel { margin-top: 12px; padding: 22px; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow-sm); }
 .communication-panel > header { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
 .communication-panel > header > div { display: flex; align-items: center; gap: 10px; }
