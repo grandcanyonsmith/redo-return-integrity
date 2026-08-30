@@ -97,7 +97,7 @@ describe("Lambda API", () => {
 
   it("evaluates the visible contract and never auto-denies on model failure", async () => {
     const store = new MemoryStore();
-    const invoke = createHandler(store);
+    const invoke = createHandler(store, { resolveOpenAIKey: async () => undefined });
     const session = json(await invoke(apiEvent("POST", "/sessions"))).sessionToken;
     const result = await invoke(apiEvent("POST", "/cases/case-good-actor-checkout/checkpoints/ORDER_RELEASE/evaluate", {
       evaluatedAt: "2026-08-24T14:11:00.000Z",
@@ -521,7 +521,11 @@ describe("Lambda API", () => {
       evidenceId: "ev-purpose-package",
       purpose: "PACKAGE_CONTENTS",
     });
-    const invoke = createHandler(store, { intakeStore, resolveOpenAIKey: async () => undefined });
+    const invoke = createHandler(store, {
+      intakeStore,
+      resolveOpenAIKey: async () => undefined,
+      now: () => new Date("2026-08-24T12:05:00.000Z"),
+    });
 
     const labelAsPackage = await invoke(apiEvent("POST", "/intake/inspections", {
       returnRecordId: "ret-jc-1042",
