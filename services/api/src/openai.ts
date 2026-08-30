@@ -157,7 +157,7 @@ export interface OpenAIAssessmentResult {
 export const assessWithOpenAI = async (input: OpenAIAssessmentInput): Promise<OpenAIAssessmentResult> => {
   const startedAt = Date.now();
   const model = input.model ?? DEFAULT_OPENAI_MODEL;
-  const apiKey = input.apiKey ?? process.env.OPENAI_API_KEY;
+  const apiKey = input.apiKey;
   if (!apiKey) {
     return {
       assessment: errorAssessment("OpenAI assessment is unavailable because no API key is configured. The case was routed to human review without an adverse automated decision."),
