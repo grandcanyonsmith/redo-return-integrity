@@ -6,6 +6,7 @@ import {
   Camera,
   Check,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
   Clock,
   Code2,
@@ -249,11 +250,13 @@ function ModelAuditPanel({
 }) {
   return (
     <section className="model-audit" aria-label={title}>
-      <header>
+      <details className="model-audit__details">
+      <summary>
         <Fingerprint aria-hidden="true" />
         <div><small>MODEL EXECUTION AUDIT</small><strong>{title}</strong></div>
         <Badge tone={audit.provider === 'OPENAI' ? 'green' : audit.provider === 'SAFE_FALLBACK' ? 'orange' : 'violet'}>{describeAuditMode(mode).toUpperCase()}</Badge>
-      </header>
+        <ChevronDown className="model-audit__chevron" aria-hidden="true" />
+      </summary>
       <dl>
         <div><dt>Provider</dt><dd>{audit.provider}</dd></div>
         <div><dt>Requested model</dt><dd>{audit.requestedModel}</dd></div>
@@ -267,6 +270,7 @@ function ModelAuditPanel({
         <div className="model-audit__hash"><dt>Output SHA-256</dt><dd><code>{audit.outputSha256 ?? 'No provider output persisted'}</code></dd></div>
       </dl>
       <p>These are request and response audit fields—not an API key, credential, or verified operator identity.</p>
+      </details>
     </section>
   )
 }
