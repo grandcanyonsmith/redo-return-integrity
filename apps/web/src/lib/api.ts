@@ -1074,7 +1074,7 @@ const fallbackInspection = (fixtureId: IntakeFixtureId): InspectionResult => {
       comparison: {
         skuMatch,
         quantityMatch,
-        serialMatch: fixtureId === 'matchReturn' || fixtureId === 'quantityMismatch' ? true : null,
+        serialMatch: fixtureId === 'matchReturn' ? true : fixtureId === 'quantityMismatch' ? false : null,
         damageObserved: fixtureId === 'damagedProduct',
         expectedQuantity: fallbackReturnRecord.product.quantity,
         observedQuantity: config.quantity,

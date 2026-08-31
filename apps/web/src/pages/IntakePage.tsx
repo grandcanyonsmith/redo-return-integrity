@@ -6,7 +6,9 @@ import {
   Camera,
   Check,
   CheckCircle2,
+  ChevronDown,
   ClipboardCheck,
+  Clock,
   Code2,
   Database,
   FileImage,
@@ -30,6 +32,7 @@ import {
 } from 'lucide-react'
 import { useState, type ChangeEvent } from 'react'
 import { Badge, PageIntro } from '../components/ui'
+import { estimateHandlingSavings } from '../lib/handling-savings'
 import {
   analyzeReturnContents,
   draftReturnCommunication,
@@ -100,6 +103,8 @@ const classificationFlags = [
 ] as const
 
 const moneyFormatter = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' })
+const percentFormatter = new Intl.NumberFormat('en-US', { style: 'percent', maximumFractionDigits: 0 })
+const formatMinutes = (value: number) => `${value.toFixed(1)} min`
 
 const formatMoney = (cents: number | null | undefined) => cents === null || cents === undefined
   ? 'Not recommended'
@@ -214,11 +219,13 @@ function ModelAuditPanel({
 }) {
   return (
     <section className="model-audit" aria-label={title}>
-      <header>
+      <details className="model-audit__details">
+      <summary>
         <Fingerprint aria-hidden="true" />
         <div><small>MODEL EXECUTION AUDIT</small><strong>{title}</strong></div>
         <Badge tone={audit.provider === 'OPENAI' ? 'green' : audit.provider === 'SAFE_FALLBACK' ? 'orange' : 'violet'}>{describeAuditMode(mode).toUpperCase()}</Badge>
-      </header>
+        <ChevronDown className="model-audit__chevron" aria-hidden="true" />
+      </summary>
       <dl>
         <div><dt>Provider</dt><dd>{audit.provider}</dd></div>
         <div><dt>Requested model</dt><dd>{audit.requestedModel}</dd></div>
@@ -232,6 +239,7 @@ function ModelAuditPanel({
         <div className="model-audit__hash"><dt>Output SHA-256</dt><dd><code>{audit.outputSha256 ?? 'No provider output persisted'}</code></dd></div>
       </dl>
       <p>These are request and response audit fields—not an API key, credential, or verified operator identity.</p>
+      </details>
     </section>
   )
 }
@@ -322,6 +330,39 @@ function InspectionOutput({
       <button className="raw-toggle" type="button" onClick={onToggleRaw} aria-expanded={rawVisible}><Code2 aria-hidden="true" /> {rawVisible ? 'Hide raw JSON' : 'View raw JSON'}</button>
       {rawVisible ? <pre className="raw-output" aria-label="Raw structured inspection JSON">{JSON.stringify(inspection, null, 2)}</pre> : null}
     </div>
+  )
+}
+
+function HandlingSavingsPanel({ inspection, draft }: { inspection: PackageInspection; draft?: CommunicationDraft }) {
+  const savings = estimateHandlingSavings({
+    inspectionLatencyMs: inspection.modelAudit.latencyMs,
+    draftLatencyMs: draft?.modelAudit.latencyMs,
+  })
+  return (
+    <section className="handling-savings" aria-label="Time saved after capture">
+      <header>
+        <Clock aria-hidden="true" />
+        <div><small>TIME SAVED AFTER CAPTURE</small><strong>AI ran the inspection{savings.draftGenerated ? ' and drafted the shopper reach-out' : ''}; the operator only reviews and approves.</strong></div>
+        <Badge tone="green">{percentFormatter.format(savings.percentReduction)} faster</Badge>
+      </header>
+      <div className="handling-savings__stats">
+        <span><small>Time saved on this return</small><strong>{formatMinutes(savings.minutesSaved)}</strong></span>
+        <span><small>Manual baseline → AI-assisted</small><strong>{formatMinutes(savings.baselineMinutes)} → {formatMinutes(savings.assistedMinutes)}</strong></span>
+        <span><small>Est. labor saved</small><strong>{moneyFormatter.format(savings.laborDollarsSaved)}</strong></span>
+      </div>
+      <div className="handling-savings__steps" role="table" aria-label="Per-step handling time">
+        <div role="row" className="handling-savings__head"><span role="columnheader">Step</span><span role="columnheader">Manual</span><span role="columnheader">AI-assisted</span><span role="columnheader">Saved</span></div>
+        {savings.steps.map((step) => (
+          <div role="row" key={step.step}>
+            <strong role="rowheader">{step.step} <Badge tone={step.basis === 'MEASURED_AI' ? 'green' : 'blue'}>{step.basis === 'MEASURED_AI' ? 'Measured' : 'Declared'}</Badge></strong>
+            <span role="cell">{step.baselineMinutes > 0 ? formatMinutes(step.baselineMinutes) : '—'}</span>
+            <span role="cell">{formatMinutes(step.assistedMinutes)}</span>
+            <span role="cell" className={step.savedMinutes >= 0 ? 'handling-savings__saved' : 'handling-savings__cost'}>{step.savedMinutes >= 0 ? '−' : '+'}{Math.abs(step.savedMinutes).toFixed(1)} min</span>
+          </div>
+        ))}
+      </div>
+      <p className="handling-savings__note">Measured values use this run's OpenAI latency ({savings.measuredAiSeconds.toFixed(1)}s total; synthetic fixtures report ~0s). The {savings.assumptions.manualInspectionMinutes}-min inspection and {savings.assumptions.manualCommunicationMinutes}-min reach-out baselines, the {savings.assumptions.humanReviewMinutes}-min human review, and the {moneyFormatter.format(savings.assumptions.loadedLaborRateDollarsPerHour)}/hr loaded rate are illustrative planning assumptions, not measured Redo data. This is handling throughput saved — not fraud prevention or recovery.</p>
+    </section>
   )
 }
 
@@ -628,6 +669,7 @@ export function IntakePage() {
         <section className="intake-step intake-step--result">
           <StepHeading number={4} title="Review the recommendation and shopper message" description="Keep model output, merchant policy, human accountability, and communication delivery as separate recorded steps." complete={decisionRecorded} />
           <InspectionOutput inspection={result.inspection} executionMode={result.executionMode} expectedSku={returnRecord.product.sku} originalImageUrl={returnRecord.product.imageUrl} warehouseImageUrl={warehouseImageUrl} warehouseProvenance={warehouseProvenance} rawVisible={rawVisible} onToggleRaw={() => setRawVisible((visible) => !visible)} />
+          <HandlingSavingsPanel inspection={result.inspection} draft={draftMutation.data?.draft} />
           <RefundRecommendation inspection={result.inspection} />
           <CommunicationPreview inspection={result.inspection} channel={channel} onChannel={changeChannel} draftMutation={draftMutation} customerPhone={returnRecord.customer.phone} />
           <HumanReview inspection={result.inspection} draft={draftMutation.data?.draft} approved={humanApproved} reviewerLabel={reviewerLabel} onReviewerLabel={setReviewerLabel} onApproved={(approved) => { setHumanApproved(approved); if (!approved) reviewMutation.reset() }} reviewMutation={reviewMutation} queueMutation={queueMutation} />

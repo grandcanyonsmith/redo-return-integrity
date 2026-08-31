@@ -690,6 +690,35 @@ describe("Lambda API", () => {
       .toBe("evidence://ev-upload-package-v1");
     expect(JSON.stringify(storedDraft)).not.toContain("signed.example");
   });
+
+  it("rejects a human final action that cites an unknown decision instead of silently using the latest", async () => {
+    const store = new MemoryStore();
+    const invoke = createHandler(store, { resolveOpenAIKey: async () => undefined });
+    const session = json(await invoke(apiEvent("POST", "/sessions"))).sessionToken;
+    await invoke(apiEvent("POST", "/cases/case-physical-empty-return/checkpoints/ITEM_INSPECTION/evaluate", {
+      evaluatedAt: "2026-08-24T16:09:00.000Z",
+      simulate: true,
+    }, session));
+    const result = await invoke(apiEvent("POST", "/cases/case-physical-empty-return/actions", {
+      actor: "HUMAN_OPERATOR",
+      action: "DENY",
+      target: "REFUND",
+      rationale: "Citing a decision id that does not exist in this case.",
+      evidenceIds: ["ev-physical-empty-photo"],
+      decisionId: "decision-does-not-exist",
+    }, session));
+    expect(result.statusCode).toBe(404);
+    expect(json(result).error.code).toBe("DECISION_NOT_FOUND");
+  });
+
+  it("rejects an oversized MCP request body before invoking the tool surface", async () => {
+    const invoke = createHandler(new MemoryStore(), { resolveOpenAIKey: async () => undefined });
+    const session = json(await invoke(apiEvent("POST", "/sessions"))).sessionToken;
+    const oversized = modernMcpEvent("tools/call", { name: "lookup_return_by_label", arguments: { padding: "x".repeat(200_000) } }, session, 1, "lookup_return_by_label");
+    const result = await invoke(oversized);
+    expect(result.statusCode).toBe(400);
+    expect(json(result).error.code).toBe("REQUEST_TOO_LARGE");
+  });
 });
 
 describe("workstation auth, settings, triage, and calls", () => {

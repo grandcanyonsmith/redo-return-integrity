@@ -230,7 +230,8 @@ const statusForError = (error: unknown): { status: number; code: string; message
   if (["UPLOAD_SESSION_LIMIT", "DAILY_UPLOAD_LIMIT"].includes(code)) return { status: 429, code, message: "The bounded demo upload-policy limit has been reached." };
   if (code.endsWith("NOT_FOUND")) return { status: 404, code, message: "The requested resource was not found in this demo session." };
   if (["REQUEST_TOO_LARGE", "UNSUPPORTED_UPLOAD_TYPE", "UPLOAD_SIZE_LIMIT", "UPLOAD_SIZE_MISMATCH", "UPLOAD_MAGIC_BYTES_MISMATCH", "INVALID_UPLOAD_CHECKSUM", "UPLOAD_VERSION_REQUIRED", "UPLOAD_VERSION_MISMATCH", "UPLOAD_PURPOSE_MISMATCH"].includes(code)) return { status: 400, code, message: "The request failed a safety, immutable-version, image-validation, or size constraint." };
-  if (["UPLOAD_SESSION_MISMATCH", "EVIDENCE_PURPOSE_MISMATCH"].includes(code)) return { status: 403, code, message: "The evidence does not belong to this session and required purpose." };
+  if (["UPLOAD_SESSION_MISMATCH", "EVIDENCE_SESSION_MISMATCH", "EVIDENCE_PURPOSE_MISMATCH"].includes(code)) return { status: 403, code, message: "The evidence does not belong to this session and required purpose." };
+  if (code === "UPLOAD_DISABLED") return { status: 503, code, message: "Ephemeral uploads are not configured in this environment; use a synthetic fixture instead." };
   if (["COMMUNICATION_NOT_RECOMMENDED", "RECIPIENT_NOT_AVAILABLE"].includes(code)) return { status: 409, code, message: "The requested communication action is not available for this record." };
   if (["REVIEW_CONTEXT_MISMATCH", "REVIEW_EVIDENCE_MISMATCH"].includes(code)) return { status: 409, code, message: "The operator review is not bound to this exact draft, inspection, and evidence set." };
   if (code === "EVIDENCE_CONTEXT_MISMATCH") return { status: 409, code, message: "An immutable evidence identifier already exists with a different context." };
@@ -592,6 +593,8 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
     }
 
     if (path === "/mcp") {
+      const rawMcpBody = eventBodyText(event);
+      if (rawMcpBody && Buffer.byteLength(rawMcpBody, "utf8") > 100_000) throw new Error("REQUEST_TOO_LARGE");
       return mcpGatewayResponse(await mcpHandler.fetch(mcpWebRequest(event, sessionId)), origin);
     }
 
@@ -697,7 +700,10 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
       const supersedesDecisionId = body.supersedesDecisionId ?? body.decisionId;
       let decisions = [...caseData.decisions];
       if (body.actor === "HUMAN_OPERATOR" && ["APPROVE", "PARTIAL_APPROVE", "DENY", "OVERTURN", "CLOSE"].includes(body.action)) {
-        const base = caseData.decisions.find((decision) => decision.decisionId === body.decisionId) ?? caseData.decisions.at(-1);
+        const base = body.decisionId
+          ? caseData.decisions.find((decision) => decision.decisionId === body.decisionId)
+          : caseData.decisions.at(-1);
+        if (!base && body.decisionId) throw new Error("DECISION_NOT_FOUND");
         if (!base) throw new Error("A human final action requires a prior checkpoint decision.");
         const humanDecision: HumanDecision = {
           decisionId: randomUUID(),
@@ -744,6 +750,7 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
         const updated = await attachFixture(store, sessionId, caseData, body.fixtureId, body.checkpointId);
         return response(201, { status: "SYNTHETIC_FIXTURE_ATTACHED", evidence: updated.evidence.at(-1), synthetic: true }, origin);
       }
+      if (process.env.UPLOAD_BUCKET_NAME) await store.acquireUploadUrlSlot(sessionId);
       return response(201, await createUploadUrl(sessionId, caseId, {
         mimeType: body.mimeType!,
         sizeBytes: body.sizeBytes!,

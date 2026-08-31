@@ -150,8 +150,14 @@ export const deriveDeterministicSignals = (
   const expectedSerials = stringArrayFact(facts, "expectedSerials");
   const observedSerials = stringArrayFact(facts, "observedSerials");
   if (expectedSerials !== undefined && observedSerials !== undefined) {
-    const missing = expectedSerials.filter((serial) => !observedSerials.includes(serial));
-    const unexpected = observedSerials.filter((serial) => !expectedSerials.includes(serial));
+    // Normalize the same way the intake service does (trim + upper-case) so a
+    // single physical return cannot yield SERIAL_MISMATCH at the checkpoint
+    // while matching at intake purely because of serial casing/whitespace.
+    const normalizeSerial = (serial: string): string => serial.trim().toUpperCase();
+    const expectedNormalized = expectedSerials.map(normalizeSerial);
+    const observedNormalized = observedSerials.map(normalizeSerial);
+    const missing = expectedNormalized.filter((serial) => !observedNormalized.includes(serial));
+    const unexpected = observedNormalized.filter((serial) => !expectedNormalized.includes(serial));
     if (missing.length > 0 || unexpected.length > 0) {
       signals.push(observed(
         "SERIAL_MISMATCH",

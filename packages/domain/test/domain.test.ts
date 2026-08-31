@@ -200,6 +200,21 @@ describe("deterministic signals", () => {
     expect(deriveDeterministicSignals(collectNativeFacts(afterCorrection), afterCorrection).map((signal) => signal.code)).not.toContain("IMPOSSIBLE_REVERSE_LOGISTICS");
   });
 
+  it("does not raise SERIAL_MISMATCH for serials that differ only by casing or whitespace", () => {
+    const facts = {
+      expectedSerials: ["JCA1-88K2", "JCA1-91M7"],
+      observedSerials: [" jca1-88k2 ", "JCA1-91M7"],
+    };
+    const codes = deriveDeterministicSignals(facts, []).map((signal) => signal.code);
+    expect(codes).not.toContain("SERIAL_MISMATCH");
+
+    const genuinelyDifferent = deriveDeterministicSignals(
+      { expectedSerials: ["JCA1-88K2"], observedSerials: ["JCA1-0000"] },
+      [],
+    ).map((signal) => signal.code);
+    expect(genuinelyDifferent).toContain("SERIAL_MISMATCH");
+  });
+
   it("ships isolated deep-cloned fixture cases", () => {
     const first = cloneFixtureCases();
     const second = cloneFixtureCases();

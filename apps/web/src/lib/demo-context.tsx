@@ -11,10 +11,31 @@ type DemoContextValue = {
 const STORAGE_KEY = 'redo-return-integrity:demo:v1'
 const DemoContext = createContext<DemoContextValue | null>(null)
 
+const allowedValues = {
+  checkout: ['challenged', 'cleared'],
+  reverseLogistics: ['inconsistent', 'receipt-reviewed', 'cleared'],
+  physical: ['inspection-hold', 'review-pending', 'approved', 'partial', 'denied', 'appealed', 'overturned', 'evidence-ready'],
+  physicalFinding: ['empty', 'decoy', 'wrong-item', 'possible-imitation', 'quantity-mismatch', 'inconclusive'],
+} as const
+
+// Persisted state is untrusted (a stale schema, hand-edited storage, or a
+// corrupt value must never crash the app or break status rendering). Accept it
+// only when every enum field is a known value; otherwise start fresh.
+const isValidDemoState = (value: unknown): value is DemoState => {
+  if (typeof value !== 'object' || value === null) return false
+  const candidate = value as Record<string, unknown>
+  if (typeof candidate.sessionId !== 'string' || candidate.sessionId.length === 0) return false
+  return (Object.keys(allowedValues) as Array<keyof typeof allowedValues>).every(
+    (key) => typeof candidate[key] === 'string' && (allowedValues[key] as readonly string[]).includes(candidate[key] as string),
+  )
+}
+
 const readState = (): DemoState => {
   try {
     const saved = sessionStorage.getItem(STORAGE_KEY)
-    return saved ? (JSON.parse(saved) as DemoState) : newDemoState()
+    if (!saved) return newDemoState()
+    const parsed: unknown = JSON.parse(saved)
+    return isValidDemoState(parsed) ? parsed : newDemoState()
   } catch {
     return newDemoState()
   }
