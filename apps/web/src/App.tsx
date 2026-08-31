@@ -1,6 +1,7 @@
 import { lazy, Suspense, type ReactNode } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { Shell } from './components/Shell'
+import { VerifyConsole } from './components/VerifyConsole'
 import { WorkstationFrame } from './components/WorkstationFrame'
 import { currentOperator } from './lib/api'
 import { DashboardPage } from './pages/DashboardPage'
@@ -14,6 +15,15 @@ import { OperatorPage } from './pages/OperatorPage'
 import { ResetPage } from './pages/ResetPage'
 import { SettingsPage } from './pages/SettingsPage'
 import { ShopperPage } from './pages/ShopperPage'
+import { VerifyAnalyticsPage } from './pages/VerifyAnalyticsPage'
+import { VerifyCasePage } from './pages/VerifyCasePage'
+import { VerifyCasesPage } from './pages/VerifyCasesPage'
+import { VerifyCustomersPage } from './pages/VerifyCustomersPage'
+import { VerifyExperiencePage } from './pages/VerifyExperiencePage'
+import { VerifyIntegrationsPage } from './pages/VerifyIntegrationsPage'
+import { VerifyOverviewPage } from './pages/VerifyOverviewPage'
+import { VerifyPolicyPage } from './pages/VerifyPolicyPage'
+import { VerifyRulesPage } from './pages/VerifyRulesPage'
 
 const ToolsPage = lazy(() => import('./pages/ToolsPage').then((module) => ({ default: module.ToolsPage })))
 
@@ -47,6 +57,18 @@ export default function App() {
       </Route>
       <Route path="login" element={<LoginPage />} />
       <Route path="settings" element={<RequireOperator><SettingsPage /></RequireOperator>} />
+      <Route path="verify/experience" element={<RequireOperator><VerifyExperiencePage /></RequireOperator>} />
+      <Route path="verify" element={<RequireOperator><VerifyConsole /></RequireOperator>}>
+        <Route index element={<VerifyRulesPage />} />
+        <Route path="overview" element={<VerifyOverviewPage />} />
+        <Route path="cases" element={<VerifyCasesPage />} />
+        <Route path="cases/:caseId" element={<VerifyCasePage />} />
+        <Route path="customers" element={<VerifyCustomersPage />} />
+        <Route path="customers/:customerId" element={<VerifyCustomersPage />} />
+        <Route path="integrations" element={<VerifyIntegrationsPage />} />
+        <Route path="analytics" element={<VerifyAnalyticsPage />} />
+        <Route path="settings" element={<VerifyPolicyPage />} />
+      </Route>
 
       <Route path="legacy" element={<Shell />}>
         <Route index element={<DashboardPage />} />

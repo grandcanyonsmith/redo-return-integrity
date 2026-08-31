@@ -8,3 +8,4 @@ export * from "./refund-portfolio.js";
 export * from "./return-intake.js";
 export * from "./signals.js";
 export * from "./types.js";
+export * from "./verify-modules.js";

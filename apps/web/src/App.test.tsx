@@ -163,6 +163,63 @@ describe('interview demo', () => {
     expect(stats).toHaveTextContent(/time saved with ai/i)
     expect(stats).toHaveTextContent(/wrongful refunds saved/i)
     expect(screen.getByRole('link', { name: /fraudulent attempts/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /redo verify/i })).toBeInTheDocument()
+  })
+
+  it('opens Redo Verify on the delivery rule and completes a customer choice', async () => {
+    renderAt('/verify', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /risk-to-route rules/i })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: /^delivery$/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('row', { name: /repeated delivery claims/i })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('heading', { name: /let.s verify your delivery/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /pickup near me/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^continue$/i }))
+    expect(screen.getByRole('heading', { name: /you.re all set/i })).toBeInTheDocument()
+    expect(screen.queryByText(/fraud/i)).not.toBeInTheDocument()
+  })
+
+  it('renders the Verify console surfaces from the mockups', async () => {
+    renderAt('/verify/overview', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /fraud protection overview/i })).toBeInTheDocument()
+    expect(screen.getByText(/12,482/)).toBeInTheDocument()
+
+    renderAt('/verify/cases/RV-10482', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /case #rv-10482/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /preview experience/i })).toBeInTheDocument()
+
+    renderAt('/verify/integrations', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /^integrations$/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /fedex authenticated/i })).toBeInTheDocument()
+
+    renderAt('/verify/analytics', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /fraud analytics/i })).toBeInTheDocument()
+    expect(screen.getByText(/\$542,880/)).toBeInTheDocument()
+
+    renderAt('/verify/settings', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /fraud policy settings/i })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /never deny from score alone/i })).toBeInTheDocument()
+
+    renderAt('/verify/customers', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /customer trust profile/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /jordan hale/i })).toBeInTheDocument()
+  })
+
+  it('completes the customer verification experience without a fraud label', async () => {
+    renderAt('/verify/experience', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /one quick verification/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /verify my identity/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^continue$/i }))
+    expect(screen.getByRole('heading', { name: /you.re all set/i })).toBeInTheDocument()
+    expect(screen.queryByText(/fraud/i)).not.toBeInTheDocument()
+  })
+
+  it('opens Condition’s second path into Resolve', async () => {
+    renderAt('/verify?tab=returns&rule=condition', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /this item includes a return tag/i })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /need another way/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^continue$/i }))
+    expect(screen.getByRole('heading', { name: /need another way/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /request review/i })).toBeInTheDocument()
   })
 
   it('opens the fraudulent attempts breakdown from the dashboard', async () => {

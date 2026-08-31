@@ -7,7 +7,8 @@
   "types": "./dist/index.d.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./refund-portfolio": "./src/refund-portfolio.ts"
+    "./refund-portfolio": "./src/refund-portfolio.ts",
+    "./verify-modules": "./src/verify-modules.ts"
   },
   "scripts": {
     "build": "tsup src/index.ts --format esm --dts --clean",

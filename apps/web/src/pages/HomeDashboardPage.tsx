@@ -91,6 +91,10 @@ export function HomeDashboardPage() {
           <span>fraudulent attempts</span>
         </Link>
       </div>
+      <Link to="/verify?tab=delivery&rule=delivery" className="ws-kpi ws-kpi--link">
+        <b>Redo Verify</b>
+        <span>Risk-to-route rules</span>
+      </Link>
       <p className="ws-dash-note">
         About {Math.round(impact.industryRate * 100)}% of refunds are fraudulent.
         This range stopped {impact.wrongfulRefundsSaved} wrongful {impact.wrongfulRefundsSaved === 1 ? 'payout' : 'payouts'}
