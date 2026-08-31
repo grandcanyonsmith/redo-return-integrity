@@ -6,9 +6,14 @@ import {
 } from "@modelcontextprotocol/server";
 import {
   CommunicationDraftSchema,
+  IntakeActivityRecordSchema,
+  IntakeCallRecordSchema,
+  IntakeDispositionRecordSchema,
   LabelLookupResultSchema,
   OperatorReviewRecordSchema,
   PackageInspectionSchema,
+  RefundPortfolioQuerySchema,
+  RefundPortfolioSchema,
   TestOutboxMessageSchema,
 } from "@return-integrity/domain";
 import { z } from "zod";
@@ -17,6 +22,8 @@ import {
   LabelLookupInputSchema,
   PackageInspectionInputSchema,
   QueueCommunicationInputSchema,
+  RecordCallOutcomeInputSchema,
+  RecordDispositionInputSchema,
   RecordReturnReviewInputSchema,
   type ReturnIntakeService,
 } from "./intake-service.js";
@@ -44,6 +51,19 @@ const QueueToolOutputSchema = z.object({
   messageId: z.string().min(1).max(120),
   deliveryDisabled: z.literal(true),
   message: TestOutboxMessageSchema,
+  activity: IntakeActivityRecordSchema.optional(),
+});
+const ActivityListToolOutputSchema = z.object({
+  activity: z.array(IntakeActivityRecordSchema).max(100),
+});
+const ActivityListInputSchema = z.object({});
+const DispositionToolOutputSchema = z.object({
+  record: IntakeDispositionRecordSchema,
+  activity: IntakeActivityRecordSchema.optional(),
+});
+const CallOutcomeToolOutputSchema = z.object({
+  call: IntakeCallRecordSchema,
+  activity: IntakeActivityRecordSchema,
 });
 
 const safeToolErrorCode = (error: unknown): string => {
@@ -151,12 +171,60 @@ export const createReturnIntakeMcpServer = (
     "queue_test_communication",
     {
       title: "Queue test communication",
-      description: "Queue a human-reviewed draft in the delivery-disabled synthetic outbox. This tool never sends email or SMS.",
+      description: "Queue a human-reviewed draft in the delivery-disabled synthetic outbox and record the session's intake activity/resolution status. This tool never sends email or SMS.",
       inputSchema: QueueCommunicationInputSchema,
       outputSchema: QueueToolOutputSchema,
       annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
     },
     (args) => callToolSafely(() => service.queueTestCommunication(sessionId, args)),
+  );
+
+  server.registerTool(
+    "list_intake_activity",
+    {
+      title: "List intake activity",
+      description: "List this session's completed intake activity records, newest first. A fresh session returns an empty list.",
+      inputSchema: ActivityListInputSchema,
+      outputSchema: ActivityListToolOutputSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    () => callToolSafely(() => service.listIntakeActivity(sessionId)),
+  );
+
+  server.registerTool(
+    "list_refund_portfolio",
+    {
+      title: "List refund portfolio",
+      description: "List the seeded warehouse refund book for the station dashboard and board, overlaid with this session's live intake activity. Optional from/to calendar days filter last activity.",
+      inputSchema: RefundPortfolioQuerySchema,
+      outputSchema: RefundPortfolioSchema,
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+    },
+    (args) => callToolSafely(() => service.listRefundPortfolio(sessionId, args)),
+  );
+
+  server.registerTool(
+    "record_intake_disposition",
+    {
+      title: "Record intake disposition",
+      description: "Persist the operator-confirmed post-photo triage decision (pass, take more photos, or set aside). SET_ASIDE also records a resolution activity entry for the session feed.",
+      inputSchema: RecordDispositionInputSchema,
+      outputSchema: DispositionToolOutputSchema,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    (args) => callToolSafely(() => service.recordIntakeDisposition(sessionId, args)),
+  );
+
+  server.registerTool(
+    "record_call_outcome",
+    {
+      title: "Record call outcome",
+      description: "Persist the outcome of a completed test-mode customer resolution call (OpenAI Realtime over WebSocket, or the deterministic simulated console): transcript digest, duration, resolution, and the session activity/status entry. This system never places a real telephone call.",
+      inputSchema: RecordCallOutcomeInputSchema,
+      outputSchema: CallOutcomeToolOutputSchema,
+      annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+    },
+    (args) => callToolSafely(() => service.recordCallOutcome(sessionId, args)),
   );
 
   return server;

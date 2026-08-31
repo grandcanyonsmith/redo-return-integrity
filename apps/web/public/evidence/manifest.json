@@ -1,67 +1,37 @@
 {
-  "fixtureSet": "juniper-circuit-return-integrity-v2",
-  "createdAt": "2026-08-24T00:00:00Z",
+  "fixtureSet": "skims-return-integrity-v1",
+  "createdAt": "2026-08-30T00:00:00Z",
   "synthetic": true,
   "containsPersonalData": false,
+  "note": "Every image is AI generated for the SKIMS demo. No real SKIMS garment, label, facility, or shopper appears in this set.",
   "items": [
     {
-      "path": "/evidence/outbound-two-cameras.png",
+      "path": "/evidence/catalog-fits-everybody-bodysuit.png",
+      "role": "catalog_reference",
+      "scenario": "expected_product",
+      "sku": "SK-FE-CAMI-BODYSUIT",
+      "expectedQuantity": 2,
+      "sha256": "b0eb8787bdfb4038d092aa519051dd3d8e77928575bb545c6a63abad75d698df"
+    },
+    {
+      "path": "/evidence/warehouse-label-station.png",
+      "role": "facility_reference",
+      "scenario": "label_print_station",
+      "sha256": "ce0a4d88ae0eb9039dfb0c6907b7c08bfcbdfe046c904ab4cf90fe7581a1fb95"
+    },
+    {
+      "path": "/evidence/outbound-two-bodysuits.png",
       "role": "outbound_reference",
       "expectedQuantity": 2,
-      "observedQuantity": 2
-    },
-    {
-      "path": "/evidence/return-empty-box.png",
-      "role": "warehouse_inspection",
-      "scenario": "empty_return",
-      "observedQuantity": 0
-    },
-    {
-      "path": "/evidence/return-wrong-item.png",
-      "role": "warehouse_inspection",
-      "scenario": "wrong_item",
-      "observedQuantity": 0
-    },
-    {
-      "path": "/evidence/return-imitation.png",
-      "role": "warehouse_inspection",
-      "scenario": "possible_imitation_and_quantity_mismatch",
-      "observedQuantity": 1
+      "observedQuantity": 2,
+      "sha256": "ac39db2c55d7acfa41ad5aabd585e042e6f25a8929bd3629deaa3fe8ac71b0f8"
     },
     {
       "path": "/evidence/return-label-rma-8821.png",
       "role": "return_label",
       "scenario": "label_lookup",
-      "identifiers": {
-        "rma": "RMA-8821",
-        "order": "JC-1042",
-        "tracking": "1Z-REDO-8821"
-      },
-      "sha256": "eac71c78f63616c760fb8a8300fa002213e6f6c5d644ff02e1847964f1c4e1e3"
-    },
-    {
-      "path": "/evidence/catalog-juniper-arc-one.png",
-      "role": "catalog_reference",
-      "scenario": "expected_product",
-      "sku": "JC-ARC-ONE-KIT",
-      "expectedQuantity": 2,
-      "sha256": "eb6d003ca64f48122f39b7857560826ad18db53be6352492ce7e669cf539e714"
-    },
-    {
-      "path": "/evidence/return-quantity-mismatch.png",
-      "role": "warehouse_inspection",
-      "scenario": "quantity_mismatch",
-      "expectedQuantity": 2,
-      "observedQuantity": 1,
-      "sha256": "1a1c77107772a937d7e48dc926f4edab9340b9470141ec0570716da940e56e90"
-    },
-    {
-      "path": "/evidence/return-damaged-product.png",
-      "role": "warehouse_inspection",
-      "scenario": "damaged_product",
-      "expectedQuantity": 2,
-      "observedQuantity": 2,
-      "sha256": "c8a02581eebb06f730ad1ab169ef028adb302de3bebb2d2c933f8b5886a2695d"
+      "identifiers": { "rma": "RMA-8821", "order": "SK-1042", "tracking": "1Z-REDO-8821" },
+      "sha256": "a10158df7360161f2b878e95c96aab6eb39f0c1a010ac46f5860c2693d58a42f"
     },
     {
       "path": "/evidence/return-matching-contents.png",
@@ -69,7 +39,55 @@
       "scenario": "match",
       "expectedQuantity": 2,
       "observedQuantity": 2,
-      "sha256": "d4d9e593066e6d54e79c88ae893de56cfb33f854838da16aa682e3fe6022860f"
+      "sha256": "d5d9375944dac5e8917550dd87a50e905e539ad02b20dae666472b4e94c6351e"
+    },
+    {
+      "path": "/evidence/return-empty-box.png",
+      "role": "warehouse_inspection",
+      "scenario": "empty_return",
+      "expectedQuantity": 2,
+      "observedQuantity": 0,
+      "sha256": "ae153b2c05c5432fedf5825ae073c211b8b42de4457687ff40f441172c28445c"
+    },
+    {
+      "path": "/evidence/return-wrong-item.png",
+      "role": "warehouse_inspection",
+      "scenario": "wrong_item",
+      "expectedQuantity": 2,
+      "observedQuantity": 0,
+      "sha256": "dded4f5bf16d9ed2ab681ff1bfa6b3a3f298d188510dea3aeb3c138581d0d89f"
+    },
+    {
+      "path": "/evidence/return-quantity-mismatch.png",
+      "role": "warehouse_inspection",
+      "scenario": "quantity_mismatch",
+      "expectedQuantity": 2,
+      "observedQuantity": 1,
+      "sha256": "4b5e6d75282a2d31d5be0506a2353c8b1e539a3b6fd087867847df09ef00bd1b"
+    },
+    {
+      "path": "/evidence/return-damaged-product.png",
+      "role": "warehouse_inspection",
+      "scenario": "damaged_product",
+      "expectedQuantity": 2,
+      "observedQuantity": 2,
+      "sha256": "3b92b411355a1a47e7ce31112d7435c149dbf4b2d1708daa7346ee64b825764b"
+    },
+    {
+      "path": "/evidence/return-wardrobing.png",
+      "role": "warehouse_inspection",
+      "scenario": "wardrobing",
+      "expectedQuantity": 2,
+      "observedQuantity": 2,
+      "sha256": "9a4b1b847670e48245d7ddeda4313ae17185c43f95e85cd1593365f19803bc72"
+    },
+    {
+      "path": "/evidence/return-imitation.png",
+      "role": "warehouse_inspection",
+      "scenario": "possible_imitation",
+      "expectedQuantity": 2,
+      "observedQuantity": 2,
+      "sha256": "fac5e7a2fcdbbe4c22663159948e684c981c74b8a53df573c25ae9ac291e81e6"
     }
   ]
 }

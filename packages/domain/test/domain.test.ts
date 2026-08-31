@@ -6,9 +6,12 @@ import {
   cloneFixtureCases,
   collectNativeFacts,
   computeIntegrityMetrics,
+  defaultOperatorSettings,
   deriveDeterministicSignals,
+  deriveDispositionRecommendation,
   deriveInspectionRecommendation,
   enforceInspectionFindingInvariants,
+  simulatedCallScript,
   errorAssessment,
   estimateRandomizedDeterrence,
   estimateCheckpointOpportunity,
@@ -292,7 +295,7 @@ describe("return intake recommendations", () => {
       nextAction: "APPROVE_FULL",
       refund: {
         recommendedType: "FULL",
-        recommendedAmountCents: 184_900,
+        recommendedAmountCents: 11_600,
         withholdAmountCents: 0,
         requiresHumanApproval: true,
       },
@@ -306,8 +309,8 @@ describe("return intake recommendations", () => {
       nextAction: "APPROVE_PARTIAL",
       refund: {
         recommendedType: "PARTIAL",
-        recommendedAmountCents: 92_450,
-        withholdAmountCents: 92_450,
+        recommendedAmountCents: 5_800,
+        withholdAmountCents: 5_800,
         requiresHumanApproval: true,
       },
     });
@@ -325,16 +328,28 @@ describe("return intake recommendations", () => {
     const wrong = fixtureInspectionFinding("wrongItem", returnRecord.product.quantity);
     const damaged = fixtureInspectionFinding("damagedProduct", returnRecord.product.quantity);
     const imitation = fixtureInspectionFinding("possibleImitation", returnRecord.product.quantity);
-    const adversarial: ReadonlyArray<[string, InspectionModelFinding]> = [
+    // The SKIMS demo product is apparel and carries no unit serials, so the
+    // serial invariants are exercised against a serial-controlled record.
+    const serialControlled: ReturnRecord = {
+      ...returnRecord,
+      product: { ...returnRecord.product, serials: ["SN-DEMO-1", "SN-DEMO-2"] },
+    };
+    const serialMatching = fixtureInspectionFinding(
+      "matchReturn",
+      serialControlled.product.quantity,
+      "ev-matchReturn",
+      serialControlled.product.serials,
+    );
+    const adversarial: ReadonlyArray<[string, InspectionModelFinding, ReturnRecord?]> = [
       ["MATCH with a false SKU comparison", {
         ...matching,
         comparison: { ...matching.comparison, skuMatch: false },
       }],
       ["MATCH without the required serial assessment or observed serials", {
-        ...matching,
-        observedItems: matching.observedItems.map((item) => ({ ...item, serials: [] })),
-        comparison: { ...matching.comparison, serialMatch: null },
-      }],
+        ...serialMatching,
+        observedItems: serialMatching.observedItems.map((item) => ({ ...item, serials: [] })),
+        comparison: { ...serialMatching.comparison, serialMatch: null },
+      }, serialControlled],
       ["MATCH with unexpected serial evidence", {
         ...matching,
         observedItems: matching.observedItems.map((item) => ({ ...item, serials: ["UNEXPECTED-SERIAL"] })),
@@ -383,13 +398,14 @@ describe("return intake recommendations", () => {
       }],
     ];
 
-    for (const [label, finding] of adversarial) {
-      const invariantSafe = enforceInspectionFindingInvariants({ returnRecord, finding });
+    for (const [label, finding, override] of adversarial) {
+      const record = override ?? returnRecord;
+      const invariantSafe = enforceInspectionFindingInvariants({ returnRecord: record, finding });
       expect(invariantSafe.classification, label).toBe("INCONCLUSIVE");
       expect(invariantSafe.confidence, label).toBe(0);
       expect(invariantSafe.summary, label).toContain("internally inconsistent");
       expect(invariantSafe.missingEvidence.some((reason) => reason.includes("Semantic consistency check")), label).toBe(true);
-      expect(deriveInspectionRecommendation({ returnRecord, finding }), label).toMatchObject({
+      expect(deriveInspectionRecommendation({ returnRecord: record, finding }), label).toMatchObject({
         nextAction: "REQUEST_MORE_EVIDENCE",
         refund: {
           recommendedType: "NO_RECOMMENDATION",
@@ -439,7 +455,7 @@ describe("return intake recommendations", () => {
   });
 
   it("caps full, partial, and temporary-hold dollars by both eligibility and the shopper request", () => {
-    const requestedRefundCents = 50_000;
+    const requestedRefundCents = 4_000;
     const cappedRecord = {
       ...returnRecord,
       return: { ...returnRecord.return, requestedRefundCents },
@@ -489,7 +505,7 @@ describe("return intake recommendations", () => {
       expect(recommendation.refund).toMatchObject({
         recommendedType: "TEMPORARY_HOLD",
         recommendedAmountCents: null,
-        withholdAmountCents: 184_900,
+        withholdAmountCents: 11_600,
         requiresHumanApproval: true,
       });
       expect(recommendation.communication.recommended).toBe(true);
@@ -516,7 +532,7 @@ describe("return intake recommendations", () => {
       reviewId: "review-1",
       inspectionId: "inspection-1",
       draftId: "draft-1",
-      returnRecordId: "ret-jc-1042",
+      returnRecordId: "ret-sk-1042",
       reviewerLabel: "  Warehouse Operator 7  ",
       reviewerIdentityAssurance: "UNAUTHENTICATED_DISPLAY_LABEL",
       draftDecision: "APPROVE_AS_WRITTEN",
@@ -530,5 +546,57 @@ describe("return intake recommendations", () => {
     expect(review.reviewerLabel).toBe("Warehouse Operator 7");
     expect(review.reviewerIdentityAssurance).toBe("UNAUTHENTICATED_DISPLAY_LABEL");
     expect(OperatorReviewRecordSchema.safeParse({ ...review, acknowledgedEvidence: false }).success).toBe(false);
+  });
+});
+
+describe("post-photo disposition triage", () => {
+  it("recommends pass, more photos, or set aside per classification with default settings", () => {
+    const derive = (classification: Parameters<typeof deriveDispositionRecommendation>[0]["classification"], confidence: number) =>
+      deriveDispositionRecommendation({ classification, confidence, missingEvidence: [] });
+    expect(derive("MATCH", 0.97).disposition).toBe("PASS");
+    expect(derive("QUANTITY_MISMATCH", 0.91).disposition).toBe("PASS");
+    expect(derive("MATCH", 0.7)).toMatchObject({ disposition: "TAKE_MORE_PHOTOS", source: "AI_RECOMMEND" });
+    expect(derive("EMPTY_BOX", 0.93).disposition).toBe("SET_ASIDE");
+    expect(derive("WRONG_PRODUCT", 0.89).disposition).toBe("SET_ASIDE");
+    expect(derive("POSSIBLE_IMITATION", 0.72).disposition).toBe("SET_ASIDE");
+    const damaged = derive("DAMAGED_PRODUCT", 0.86);
+    expect(damaged.disposition).toBe("TAKE_MORE_PHOTOS");
+    expect(damaged.photoInstructions.length).toBeGreaterThan(0);
+    expect(derive("INCONCLUSIVE", 0).disposition).toBe("TAKE_MORE_PHOTOS");
+  });
+
+  it("honors operator overrides and the photo retake budget", () => {
+    const settings = defaultOperatorSettings();
+    const forced = deriveDispositionRecommendation({
+      classification: "MATCH",
+      confidence: 0.99,
+      missingEvidence: [],
+      settings: { ...settings, dispositionOverrides: { ...settings.dispositionOverrides, MATCH: "FORCE_SET_ASIDE" } },
+    });
+    expect(forced).toMatchObject({ disposition: "SET_ASIDE", source: "OPERATOR_SETTING" });
+
+    const exhausted = deriveDispositionRecommendation({
+      classification: "INCONCLUSIVE",
+      confidence: 0,
+      missingEvidence: [],
+      settings,
+      retakeCount: settings.maxPhotoRetakes,
+    });
+    expect(exhausted.disposition).toBe("SET_ASIDE");
+    expect(exhausted.reason).toContain("retake limit");
+  });
+
+  it("produces a deterministic simulated call script that defers money to humans", () => {
+    const script = simulatedCallScript({
+      classification: "QUANTITY_MISMATCH",
+      customerName: "Ava Morgan",
+      productTitle: "Fits Everybody Cami Bodysuit",
+      rmaId: "RMA-8821",
+      recommendedAmountCents: 92_450,
+    });
+    expect(script[0]).toMatchObject({ speaker: "AGENT" });
+    expect(script.at(-1)?.text).toContain("human reviewer signs off");
+    expect(script.map((turn) => turn.text).join(" ")).toContain("$924.50");
+    expect(script.length).toBeGreaterThanOrEqual(6);
   });
 });

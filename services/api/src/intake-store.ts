@@ -1,10 +1,15 @@
 import { createHash, randomUUID } from "node:crypto";
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
-import { DynamoDBDocumentClient, GetCommand, PutCommand } from "@aws-sdk/lib-dynamodb";
+import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from "@aws-sdk/lib-dynamodb";
 import {
   CommunicationDraftSchema,
   CompletedIntakeEvidenceSchema,
+  IntakeActivityRecordSchema,
+  IntakeCallRecordSchema,
+  IntakeDispositionRecordSchema,
+  OperatorProfileSchema,
   OperatorReviewRecordSchema,
+  OperatorSettingsSchema,
   PackageInspectionSchema,
   ReturnRecordSchema,
   TestOutboxMessageSchema,
@@ -12,8 +17,13 @@ import {
   normalizeReturnLookupValue,
   type CommunicationDraft,
   type CompletedIntakeEvidence,
+  type IntakeActivityRecord,
+  type IntakeCallRecord,
+  type IntakeDispositionRecord,
   type LabelExtraction,
+  type OperatorProfile,
   type OperatorReviewRecord,
+  type OperatorSettings,
   type PackageInspection,
   type ReturnRecord,
   type TestOutboxMessage,
@@ -43,6 +53,16 @@ export interface ReturnIntakeStore {
   ): Promise<TestOutboxMessage>;
   putCompletedEvidence(sessionId: string, evidence: CompletedIntakeEvidence): Promise<CompletedIntakeEvidence>;
   getCompletedEvidence(sessionId: string, evidenceId: string): Promise<CompletedIntakeEvidence | undefined>;
+  putActivity(sessionId: string, activity: IntakeActivityRecord): Promise<void>;
+  listActivity(sessionId: string): Promise<IntakeActivityRecord[]>;
+  putOperatorProfile(sessionId: string, profile: OperatorProfile): Promise<void>;
+  getOperatorProfile(sessionId: string): Promise<OperatorProfile | undefined>;
+  putOperatorSettings(sessionId: string, settings: OperatorSettings): Promise<void>;
+  getOperatorSettings(sessionId: string): Promise<OperatorSettings | undefined>;
+  putDisposition(sessionId: string, record: IntakeDispositionRecord): Promise<void>;
+  getDisposition(sessionId: string, dispositionId: string): Promise<IntakeDispositionRecord | undefined>;
+  putCallRecord(sessionId: string, record: IntakeCallRecord): Promise<void>;
+  getCallRecord(sessionId: string, callId: string): Promise<IntakeCallRecord | undefined>;
 }
 
 const extractionCandidates = (extraction: LabelExtraction): ReadonlyArray<[ReturnLookupKind, string]> => {
@@ -63,6 +83,11 @@ export class MemoryReturnIntakeStore implements ReturnIntakeStore {
   private readonly reviews = new Map<string, OperatorReviewRecord>();
   private readonly outbox = new Map<string, TestOutboxMessage>();
   private readonly completedEvidence = new Map<string, CompletedIntakeEvidence>();
+  private readonly activity = new Map<string, IntakeActivityRecord>();
+  private readonly operators = new Map<string, OperatorProfile>();
+  private readonly settings = new Map<string, OperatorSettings>();
+  private readonly dispositions = new Map<string, IntakeDispositionRecord>();
+  private readonly calls = new Map<string, IntakeCallRecord>();
 
   constructor(records: readonly ReturnRecord[] = fixtureReturnRecords) {
     for (const candidate of records) {
@@ -177,6 +202,59 @@ export class MemoryReturnIntakeStore implements ReturnIntakeStore {
     const evidence = this.completedEvidence.get(`${sessionId}#${evidenceId}`);
     if (!evidence || new Date(evidence.expiresAt).getTime() <= Date.now()) return undefined;
     return structuredClone(evidence);
+  }
+
+  async putActivity(sessionId: string, activity: IntakeActivityRecord): Promise<void> {
+    const valid = IntakeActivityRecordSchema.parse(activity);
+    if (valid.sessionId !== sessionId) throw new Error("ACTIVITY_SESSION_MISMATCH");
+    this.activity.set(`${sessionId}#${valid.activityId}`, structuredClone(valid));
+  }
+
+  async listActivity(sessionId: string): Promise<IntakeActivityRecord[]> {
+    return [...this.activity.values()]
+      .filter((record) => record.sessionId === sessionId)
+      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt))
+      .map((record) => structuredClone(record));
+  }
+
+  async putOperatorProfile(sessionId: string, profile: OperatorProfile): Promise<void> {
+    this.operators.set(sessionId, structuredClone(OperatorProfileSchema.parse(profile)));
+  }
+
+  async getOperatorProfile(sessionId: string): Promise<OperatorProfile | undefined> {
+    const profile = this.operators.get(sessionId);
+    return profile ? structuredClone(profile) : undefined;
+  }
+
+  async putOperatorSettings(sessionId: string, settings: OperatorSettings): Promise<void> {
+    this.settings.set(sessionId, structuredClone(OperatorSettingsSchema.parse(settings)));
+  }
+
+  async getOperatorSettings(sessionId: string): Promise<OperatorSettings | undefined> {
+    const settings = this.settings.get(sessionId);
+    return settings ? structuredClone(settings) : undefined;
+  }
+
+  async putDisposition(sessionId: string, record: IntakeDispositionRecord): Promise<void> {
+    const valid = IntakeDispositionRecordSchema.parse(record);
+    if (valid.sessionId !== sessionId) throw new Error("DISPOSITION_SESSION_MISMATCH");
+    this.dispositions.set(`${sessionId}#${valid.dispositionId}`, structuredClone(valid));
+  }
+
+  async getDisposition(sessionId: string, dispositionId: string): Promise<IntakeDispositionRecord | undefined> {
+    const record = this.dispositions.get(`${sessionId}#${dispositionId}`);
+    return record ? structuredClone(record) : undefined;
+  }
+
+  async putCallRecord(sessionId: string, record: IntakeCallRecord): Promise<void> {
+    const valid = IntakeCallRecordSchema.parse(record);
+    if (valid.sessionId !== sessionId) throw new Error("CALL_SESSION_MISMATCH");
+    this.calls.set(`${sessionId}#${valid.callId}`, structuredClone(valid));
+  }
+
+  async getCallRecord(sessionId: string, callId: string): Promise<IntakeCallRecord | undefined> {
+    const record = this.calls.get(`${sessionId}#${callId}`);
+    return record ? structuredClone(record) : undefined;
   }
 }
 
@@ -476,6 +554,91 @@ export class DynamoReturnIntakeStore implements ReturnIntakeStore {
     const parsed = CompletedIntakeEvidenceSchema.safeParse(item?.evidence);
     if (!parsed.success || new Date(parsed.data.expiresAt).getTime() <= Date.now()) return undefined;
     return parsed.data;
+  }
+
+  async putActivity(sessionId: string, activity: IntakeActivityRecord): Promise<void> {
+    const valid = IntakeActivityRecordSchema.parse(activity);
+    if (valid.sessionId !== sessionId) throw new Error("ACTIVITY_SESSION_MISMATCH");
+    await this.client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        PK: `SESSION#${sessionId}`,
+        SK: `ACTIVITY#${valid.activityId}`,
+        entity: "IntakeActivityRecord",
+        activity: valid,
+        ttl: Math.floor(Date.now() / 1_000) + 24 * 60 * 60,
+      },
+    }));
+  }
+
+  async listActivity(sessionId: string): Promise<IntakeActivityRecord[]> {
+    const result = await this.client.send(new QueryCommand({
+      TableName: this.tableName,
+      KeyConditionExpression: "PK = :pk AND begins_with(SK, :sk)",
+      ExpressionAttributeValues: { ":pk": `SESSION#${sessionId}`, ":sk": "ACTIVITY#" },
+      Limit: 100,
+    }));
+    return (result.Items ?? [])
+      .map((item) => IntakeActivityRecordSchema.safeParse(item.activity))
+      .flatMap((parsed) => (parsed.success ? [parsed.data] : []))
+      .sort((a, b) => b.recordedAt.localeCompare(a.recordedAt));
+  }
+
+  private async putSessionItem(sessionId: string, sk: string, entity: string, payload: Record<string, unknown>): Promise<void> {
+    await this.client.send(new PutCommand({
+      TableName: this.tableName,
+      Item: {
+        PK: `SESSION#${sessionId}`,
+        SK: sk,
+        entity,
+        ...payload,
+        ttl: Math.floor(Date.now() / 1_000) + 24 * 60 * 60,
+      },
+    }));
+  }
+
+  async putOperatorProfile(sessionId: string, profile: OperatorProfile): Promise<void> {
+    await this.putSessionItem(sessionId, "OPERATOR#PROFILE", "OperatorProfile", { profile: OperatorProfileSchema.parse(profile) });
+  }
+
+  async getOperatorProfile(sessionId: string): Promise<OperatorProfile | undefined> {
+    const item = await this.getItem(`SESSION#${sessionId}`, "OPERATOR#PROFILE");
+    const parsed = OperatorProfileSchema.safeParse(item?.profile);
+    return parsed.success ? parsed.data : undefined;
+  }
+
+  async putOperatorSettings(sessionId: string, settings: OperatorSettings): Promise<void> {
+    await this.putSessionItem(sessionId, "SETTINGS#PROFILE", "OperatorSettings", { settings: OperatorSettingsSchema.parse(settings) });
+  }
+
+  async getOperatorSettings(sessionId: string): Promise<OperatorSettings | undefined> {
+    const item = await this.getItem(`SESSION#${sessionId}`, "SETTINGS#PROFILE");
+    const parsed = OperatorSettingsSchema.safeParse(item?.settings);
+    return parsed.success ? parsed.data : undefined;
+  }
+
+  async putDisposition(sessionId: string, record: IntakeDispositionRecord): Promise<void> {
+    const valid = IntakeDispositionRecordSchema.parse(record);
+    if (valid.sessionId !== sessionId) throw new Error("DISPOSITION_SESSION_MISMATCH");
+    await this.putSessionItem(sessionId, `DISPOSITION#${valid.dispositionId}`, "IntakeDispositionRecord", { disposition: valid });
+  }
+
+  async getDisposition(sessionId: string, dispositionId: string): Promise<IntakeDispositionRecord | undefined> {
+    const item = await this.getItem(`SESSION#${sessionId}`, `DISPOSITION#${dispositionId}`);
+    const parsed = IntakeDispositionRecordSchema.safeParse(item?.disposition);
+    return parsed.success ? parsed.data : undefined;
+  }
+
+  async putCallRecord(sessionId: string, record: IntakeCallRecord): Promise<void> {
+    const valid = IntakeCallRecordSchema.parse(record);
+    if (valid.sessionId !== sessionId) throw new Error("CALL_SESSION_MISMATCH");
+    await this.putSessionItem(sessionId, `CALL#${valid.callId}`, "IntakeCallRecord", { call: valid });
+  }
+
+  async getCallRecord(sessionId: string, callId: string): Promise<IntakeCallRecord | undefined> {
+    const item = await this.getItem(`SESSION#${sessionId}`, `CALL#${callId}`);
+    const parsed = IntakeCallRecordSchema.safeParse(item?.call);
+    return parsed.success ? parsed.data : undefined;
   }
 }
 

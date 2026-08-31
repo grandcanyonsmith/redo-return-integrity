@@ -9,17 +9,17 @@ import { evaluateCheckpoint } from '../lib/api'
 import { useDemo } from '../lib/demo-context'
 
 const evidenceImages = [
-  { src: '/evidence/return-empty-box.png', label: 'Open container · Empty', view: 'Camera 02' },
-  { src: '/evidence/outbound-two-cameras.png', label: 'Outbound reference', view: 'Pack station' },
+  { src: '/evidence/return-empty-box.png', label: 'Open mailer · Empty', view: 'Camera 02' },
+  { src: '/evidence/outbound-two-bodysuits.png', label: 'Outbound reference', view: 'Pack station' },
 ]
 
 const protocol = [
   { label: 'Scan inbound label', value: 'RMA-8821 · matched', icon: ScanBarcode },
-  { label: 'Capture sealed parcel', value: '2 views · complete', icon: Camera },
-  { label: 'Record calibrated weight', value: '0.18 kg · scale S-14', icon: Scale },
-  { label: 'Record dimensions', value: '31 × 24 × 12 cm', icon: Ruler },
+  { label: 'Capture sealed mailer', value: '2 views · complete', icon: Camera },
+  { label: 'Record calibrated weight', value: '0.04 kg · scale S-14', icon: Scale },
+  { label: 'Record dimensions', value: '30 × 25 × 2 cm', icon: Ruler },
   { label: 'Capture unpack sequence', value: '6 frames · complete', icon: PackageOpen },
-  { label: 'Scan item serial & qty', value: 'No item observed · qty 0', icon: ClipboardCheck },
+  { label: 'Scan hang tag & qty', value: 'No garment observed · qty 0', icon: ClipboardCheck },
 ]
 
 const findingOptions = ['empty', 'decoy', 'wrong-item', 'possible-imitation', 'quantity-mismatch', 'inconclusive'] as const
@@ -66,8 +66,8 @@ export function OperatorPage() {
       <PageIntro eyebrow="MANAGED VERIFY · CAPTURE REVIEW" title={<>Review the capture. <em>Record only what you see.</em></>} description="This synthetic station starts after the six-step warehouse capture is complete. Confirm a neutral native observation before requesting any model assessment or routing the case to a merchant." actions={<Badge tone="violet" icon={Warehouse}>Station DEN-04 · Synthetic fixture</Badge>} />
 
       <div className="operator-header">
-        <Link className="operator-back" to="/"><ChevronLeft aria-hidden="true" /> Dashboard</Link>
-        <div><Badge tone="blue">RMA-8821</Badge><strong>Juniper Arc One · Order JC-1042</strong><span>Expected: 2 cameras · 1.80 kg · Serials JCA1-88K2 / JCA1-91M7</span></div>
+        <Link className="operator-back" to="/legacy"><ChevronLeft aria-hidden="true" /> Dashboard</Link>
+        <div><Badge tone="blue">RMA-8821</Badge><strong>Fits Everybody Cami Bodysuit · Order SK-1042</strong><span>Expected: 2 pieces · Onyx · sizes M and L · 0.38 kg</span></div>
         <div className="operator-progress"><small>Protocol</small><strong>6 / 6</strong><span><i style={{ width: '100%' }} /></span></div>
       </div>
 
@@ -100,7 +100,7 @@ export function OperatorPage() {
           <div className="finding-options" role="radiogroup" aria-label="Inspection finding">
             {findingOptions.map((option) => <button id={`finding-${option}`} role="radio" aria-checked={finding === option} tabIndex={finding === option || (!finding && option === 'empty') ? 0 : -1} className={finding === option ? 'active' : ''} key={option} onClick={() => selectFinding(option)} onKeyDown={(event) => moveFindingFocus(event, option)}><span>{finding === option ? <Check /> : null}</span>{formatStatus(option)}</button>)}
           </div>
-          <div className="operator-observation"><Box aria-hidden="true" /><div><strong>Structured observation</strong><p>{!finding ? 'No discrepancy classification is selected. Review the capture record, then choose the observation that the images and native measurements support.' : finding === 'empty' ? 'No merchandise observed after a complete six-frame unpacking sequence. Outer packaging and RMA label are present. Expected quantity 2 cameras; observed quantity 0.' : `${formatStatus(finding)} selected. This finding remains an operator observation until confirmed and routed to merchant review.`}</p></div></div>
+          <div className="operator-observation"><Box aria-hidden="true" /><div><strong>Structured observation</strong><p>{!finding ? 'No discrepancy classification is selected. Review the capture record, then choose the observation that the images and native measurements support.' : finding === 'empty' ? 'No garment observed after a complete six-frame unpacking sequence. Outer mailer and RMA label are present. Expected quantity 2 pieces; observed quantity 0.' : `${formatStatus(finding)} selected. This finding remains an operator observation until confirmed and routed to merchant review.`}</p></div></div>
           <label className="checkbox-label checkbox-label--boxed"><input type="checkbox" checked={operatorConfirmed} disabled={!finding} onChange={(event) => setOperatorConfirmed(event.target.checked)} /><span>I reviewed the completed capture protocol and confirm this describes what I observed. I am not making the refund decision.</span></label>
           <button className="button button--primary" disabled={!operatorConfirmed || !finding} onClick={finalize}><ClipboardCheck size={17} /> Confirm finding & route to merchant</button>
         </div>

@@ -25,7 +25,7 @@ Prove three end-to-end claims:
 
 ## Fixture truth
 
-- merchant: Juniper Circuit, fictional high-AOV electronics;
+- merchant: SKIMS, apparel and shapewear;
 - all shopper/order/carrier/payment/warehouse/payment-dispute data: synthetic;
 - all built-in imagery is synthetic; the optional camera path becomes session-scoped demo evidence only after exact-version checksum, purpose, MIME-signature, size, and magic-byte completion succeeds;
 - the upload POST authorization lasts 60 seconds; any evidence preview/model URL is separately minted for 300 seconds against the exact completed version and is never persisted;

@@ -76,10 +76,10 @@ const groups: DemoGroup[] = [
     label: 'Operations',
     headline: 'Verify every physical return.',
     demos: [
-      { id: 'scan-return', label: 'Scan return label', description: 'Extract and resolve the RMA', icon: ScanBarcode, fullPath: '/intake', fullLabel: 'Open live intake' },
-      { id: 'inspect-contents', label: 'Inspect package', description: 'Compare contents with the SKU', icon: PackageOpen, fullPath: '/intake', fullLabel: 'Open vision workflow' },
-      { id: 'grade-route', label: 'Grade & route', description: 'Choose disposition and owner', icon: Warehouse, fullPath: '/operator', fullLabel: 'Open warehouse view' },
-      { id: 'ground-truth', label: 'Record ground truth', description: 'Write a verified outcome label', icon: FileCheck2, fullPath: '/operator', fullLabel: 'Open evidence station' },
+      { id: 'scan-return', label: 'Scan return label', description: 'Extract and resolve the RMA', icon: ScanBarcode, fullPath: '/legacy/intake', fullLabel: 'Open live intake' },
+      { id: 'inspect-contents', label: 'Inspect package', description: 'Compare contents with the SKU', icon: PackageOpen, fullPath: '/legacy/intake', fullLabel: 'Open vision workflow' },
+      { id: 'grade-route', label: 'Grade & route', description: 'Choose disposition and owner', icon: Warehouse, fullPath: '/legacy/operator', fullLabel: 'Open warehouse view' },
+      { id: 'ground-truth', label: 'Record ground truth', description: 'Write a verified outcome label', icon: FileCheck2, fullPath: '/legacy/operator', fullLabel: 'Open evidence station' },
     ],
   },
   {
@@ -87,9 +87,9 @@ const groups: DemoGroup[] = [
     label: 'Shopper',
     headline: 'Give good shoppers a way through.',
     demos: [
-      { id: 'checkout-challenge', label: 'Clear checkout', description: 'Choose a low-friction check', icon: Fingerprint, fullPath: '/shopper?journey=checkout', fullLabel: 'Open checkout journey' },
-      { id: 'return-handoff', label: 'Resolve handoff', description: 'Correct impossible logistics', icon: Truck, fullPath: '/shopper?journey=return', fullLabel: 'Open return journey' },
-      { id: 'contest-appeal', label: 'Contest a finding', description: 'Add context before settlement', icon: MessageSquareText, fullPath: '/shopper?journey=appeal', fullLabel: 'Open appeal journey' },
+      { id: 'checkout-challenge', label: 'Clear checkout', description: 'Choose a low-friction check', icon: Fingerprint, fullPath: '/legacy/shopper?journey=checkout', fullLabel: 'Open checkout journey' },
+      { id: 'return-handoff', label: 'Resolve handoff', description: 'Correct impossible logistics', icon: Truck, fullPath: '/legacy/shopper?journey=return', fullLabel: 'Open return journey' },
+      { id: 'contest-appeal', label: 'Contest a finding', description: 'Add context before settlement', icon: MessageSquareText, fullPath: '/legacy/shopper?journey=appeal', fullLabel: 'Open appeal journey' },
     ],
   },
   {
@@ -97,9 +97,9 @@ const groups: DemoGroup[] = [
     label: 'Merchant',
     headline: 'Turn evidence into accountable action.',
     demos: [
-      { id: 'review-evidence', label: 'Review evidence', description: 'Compare expected and observed', icon: Store, fullPath: '/merchant', fullLabel: 'Open merchant console' },
-      { id: 'set-refund', label: 'Set resolution', description: 'Apply policy-safe refund math', icon: CircleDollarSign, fullPath: '/merchant', fullLabel: 'Open decision workspace' },
-      { id: 'approve-message', label: 'Approve message', description: 'Review email or SMS before queue', icon: Mail, fullPath: '/intake', fullLabel: 'Open communication review' },
+      { id: 'review-evidence', label: 'Review evidence', description: 'Compare expected and observed', icon: Store, fullPath: '/legacy/merchant', fullLabel: 'Open merchant console' },
+      { id: 'set-refund', label: 'Set resolution', description: 'Apply policy-safe refund math', icon: CircleDollarSign, fullPath: '/legacy/merchant', fullLabel: 'Open decision workspace' },
+      { id: 'approve-message', label: 'Approve message', description: 'Review email or SMS before queue', icon: Mail, fullPath: '/legacy/intake', fullLabel: 'Open communication review' },
     ],
   },
   {
@@ -107,9 +107,9 @@ const groups: DemoGroup[] = [
     label: 'Intelligence',
     headline: 'Measure what the model really changed.',
     demos: [
-      { id: 'decision-map', label: 'Decision lifecycle', description: 'Inspect every evidence checkpoint', icon: GitBranch, fullPath: '/lifecycle', fullLabel: 'Open 15-stage map' },
-      { id: 'evaluation-lab', label: 'Evaluation lab', description: 'Balance detection and friction', icon: FlaskConical, fullPath: '/lab', fullLabel: 'Open evaluation lab' },
-      { id: 'value-model', label: 'Prevented value', description: 'Separate prevented and recovered', icon: BarChart3, fullPath: '/', fullLabel: 'Open operations dashboard' },
+      { id: 'decision-map', label: 'Decision lifecycle', description: 'Inspect every evidence checkpoint', icon: GitBranch, fullPath: '/legacy/lifecycle', fullLabel: 'Open 15-stage map' },
+      { id: 'evaluation-lab', label: 'Evaluation lab', description: 'Balance detection and friction', icon: FlaskConical, fullPath: '/legacy/lab', fullLabel: 'Open evaluation lab' },
+      { id: 'value-model', label: 'Prevented value', description: 'Separate prevented and recovered', icon: BarChart3, fullPath: '/legacy', fullLabel: 'Open operations dashboard' },
     ],
   },
 ]
@@ -123,7 +123,7 @@ const inspectionScenarios = {
     classification: 'MATCH',
     observed: '2 of 2',
     action: 'Continue to full-refund review',
-    amount: '$1,849.00',
+    amount: '$116.00',
     tone: 'green' as const,
   },
   empty: {
@@ -132,7 +132,7 @@ const inspectionScenarios = {
     classification: 'EMPTY_BOX',
     observed: '0 of 2',
     action: 'Hold refund and request review',
-    amount: '$1,849.00 withheld',
+    amount: '$116.00 withheld',
     tone: 'orange' as const,
   },
   quantity: {
@@ -141,7 +141,7 @@ const inspectionScenarios = {
     classification: 'QUANTITY_MISMATCH',
     observed: '1 of 2',
     action: 'Review a one-unit partial refund',
-    amount: '$924.50 refund',
+    amount: '$58.00 refund',
     tone: 'blue' as const,
   },
   wrong: {
@@ -150,7 +150,7 @@ const inspectionScenarios = {
     classification: 'WRONG_PRODUCT',
     observed: '0 matching',
     action: 'Hold and request shopper context',
-    amount: '$1,849.00 withheld',
+    amount: '$116.00 withheld',
     tone: 'red' as const,
   },
 }
@@ -161,7 +161,7 @@ const checkpoints = [
   { label: 'Checkout', signal: 'New address + high order value', owner: 'Policy orchestration', action: 'Offer reversible challenge' },
   { label: 'Return request', signal: 'Reason, quantity, history, policy', owner: 'Returns policy', action: 'Approve, hold, or request evidence' },
   { label: 'Carrier handoff', signal: 'Scan timing and route feasibility', owner: 'Logistics', action: 'Continue, trace, or request receipt' },
-  { label: 'Warehouse', signal: 'Weight, photos, count, SKU, serial', owner: 'Operations', action: 'Grade, quarantine, or corroborate' },
+  { label: 'Warehouse', signal: 'Weight, photos, count, variant SKU, tag', owner: 'Operations', action: 'Grade, quarantine, or corroborate' },
   { label: 'Settlement', signal: 'Evidence + policy + human record', owner: 'Merchant reviewer', action: 'Refund, adjust, or contest' },
 ]
 
@@ -285,12 +285,12 @@ export function ToolsPage() {
                 <figure><img src="/evidence/return-label-rma-8821.png" alt="Synthetic return label for demo RMA 8821" /><figcaption>Synthetic label · no real shopper data</figcaption></figure>
                 <div className="tools-label-fields">
                   <span><small>RMA</small><strong>{labelResolved ? 'RMA-8821' : 'Waiting for extraction'}</strong></span>
-                  <span><small>Order</small><strong>{labelResolved ? 'JC-1042' : '—'}</strong></span>
+                  <span><small>Order</small><strong>{labelResolved ? 'SK-1042' : '—'}</strong></span>
                   <span><small>Tracking</small><strong>{labelResolved ? '1Z-REDO-8821' : '—'}</strong></span>
                   <button type="button" className="button button--primary" onClick={() => setLabelResolved(true)} disabled={labelResolved}><ScanBarcode size={17} aria-hidden="true" /> {labelResolved ? 'Preview complete' : 'Preview label lookup'}</button>
                 </div>
               </div>
-              {labelResolved ? <DemoStatus><CheckCircle2 aria-hidden="true" /><span><strong>Juniper Arc One · 2-camera kit</strong>Requested and eligible refund: $1,849.00</span><button type="button" aria-label="Continue from label lookup to inspect package" onClick={() => continueToDemo('inspect-contents')}>Inspect package <ArrowRight aria-hidden="true" /></button></DemoStatus> : null}
+              {labelResolved ? <DemoStatus><CheckCircle2 aria-hidden="true" /><span><strong>Fits Everybody Cami Bodysuit · 2 pieces</strong>Requested and eligible refund: $116.00</span><button type="button" aria-label="Continue from label lookup to inspect package" onClick={() => continueToDemo('inspect-contents')}>Inspect package <ArrowRight aria-hidden="true" /></button></DemoStatus> : null}
             </div>
           </>
         )
@@ -313,7 +313,7 @@ export function ToolsPage() {
                 {inspectionComplete ? (
                   <div className="tools-result-card" ref={inspectionResultRef} role="status" aria-live="polite" tabIndex={-1}>
                     <Badge tone={scenario.tone}>{scenario.classification}</Badge>
-                    <dl><div><dt>Expected</dt><dd>2 × JC-ARC-ONE</dd></div><div><dt>Observed</dt><dd>{scenario.observed}</dd></div><div><dt>Next action</dt><dd>{scenario.action}</dd></div><div><dt>Policy amount</dt><dd>{scenario.amount}</dd></div></dl>
+                    <dl><div><dt>Expected</dt><dd>2 × SK-FE-CAMI-BODYSUIT</dd></div><div><dt>Observed</dt><dd>{scenario.observed}</dd></div><div><dt>Next action</dt><dd>{scenario.action}</dd></div><div><dt>Policy amount</dt><dd>{scenario.amount}</dd></div></dl>
                     <small><ShieldCheck aria-hidden="true" /> The model observed evidence; deterministic policy calculated the amount.</small>
                   </div>
                 ) : (
@@ -331,7 +331,7 @@ export function ToolsPage() {
             <div className="tools-demo-centered">
               <div className="tools-demo-heading"><Badge tone="blue">WAREHOUSE DECISION</Badge><h3>Grade the verified item</h3><p>The warehouse records condition and custody. Merchant policy owns the financial outcome.</p></div>
               <div className="tools-grade-card">
-                <div className="tools-product-identity"><img src="/evidence/catalog-juniper-arc-one.png" alt="Fictional Juniper Arc One two-camera kit" /><span><small>EXPECTED SKU</small><strong>Juniper Arc One</strong><b>JC-ARC-ONE-KIT · quantity 2</b></span></div>
+                <div className="tools-product-identity"><img src="/evidence/catalog-fits-everybody-bodysuit.png" alt="Synthetic catalog reference for the two-piece bodysuit order" /><span><small>EXPECTED SKU</small><strong>Fits Everybody Cami Bodysuit</strong><b>SK-FE-CAMI-BODYSUIT · quantity 2</b></span></div>
                 <div className="tools-choice-grid" role="group" aria-label="Disposition grade">
                   <button type="button" className={grade === 'restock' ? 'active' : ''} aria-pressed={grade === 'restock'} onClick={() => setGrade('restock')}><PackageCheck aria-hidden="true" /><strong>Restock</strong><span>Complete and sellable</span></button>
                   <button type="button" className={grade === 'quarantine' ? 'active' : ''} aria-pressed={grade === 'quarantine'} onClick={() => setGrade('quarantine')}><ShieldCheck aria-hidden="true" /><strong>Quarantine</strong><span>Mismatch or authentication</span></button>
@@ -367,7 +367,7 @@ export function ToolsPage() {
             <div className="tools-demo-centered">
               <div className="tools-demo-heading"><Badge tone="orange">SHOPPER RECOVERY</Badge><h3>{checkoutMethod ? 'Thanks — your order is moving.' : 'One quick check before we ship'}</h3><p>{checkoutMethod ? 'The shopper cleared the reversible challenge. No fraud label was created.' : 'A new address and high order value trigger choices, not an accusation.'}</p></div>
               <div className="tools-checkout-card">
-                <div className="tools-order-line"><img src="/evidence/catalog-juniper-arc-one.png" alt="Juniper Arc One catalog item" /><span><strong>Juniper Arc One</strong><small>2-camera kit · Graphite</small></span><b>$1,849</b></div>
+                <div className="tools-order-line"><img src="/evidence/catalog-fits-everybody-bodysuit.png" alt="Catalog reference for the returned bodysuit" /><span><strong>Fits Everybody Cami Bodysuit</strong><small>Onyx · sizes M and L</small></span><b>$116</b></div>
                 {!checkoutMethod ? <div className="tools-verification-list">
                   <button type="button" onClick={() => setCheckoutMethod('email')}><Mail aria-hidden="true" /><span><strong>Email + payment check</strong><small>Verify two channels already on the order</small></span><ChevronRight aria-hidden="true" /></button>
                   <button type="button" onClick={() => setCheckoutMethod('bank')}><Fingerprint aria-hidden="true" /><span><strong>Verify with your bank</strong><small>Complete a secure 3DS approval</small></span><ChevronRight aria-hidden="true" /></button>
@@ -414,9 +414,9 @@ export function ToolsPage() {
             <div className="tools-demo-centered tools-demo-centered--wide">
               <div className="tools-demo-heading"><Badge tone="orange">MERCHANT REVIEW</Badge><h3>Expected versus observed</h3><p>The reviewer sees native evidence, model interpretation, and merchant policy as separate layers.</p></div>
               <div className="tools-evidence-compare">
-                <figure><span>ORIGINAL SKU</span><img src="/evidence/catalog-juniper-arc-one.png" alt="Original fictional two-camera catalog kit" /><figcaption>2 cameras · unit price $924.50</figcaption></figure>
+                <figure><span>ORIGINAL SKU</span><img src="/evidence/catalog-fits-everybody-bodysuit.png" alt="Synthetic catalog reference for the returned bodysuit" /><figcaption>2 pieces · unit price $58.00</figcaption></figure>
                 <div className="tools-compare-mark"><span>≠</span><small>1.62 kg delta</small></div>
-                <figure><span>WAREHOUSE EVIDENCE</span><img src="/evidence/return-empty-box.png" alt="Synthetic warehouse photograph of an empty return box" /><figcaption>0 cameras · inbound 0.18 kg</figcaption></figure>
+                <figure><span>WAREHOUSE EVIDENCE</span><img src="/evidence/return-empty-box.png" alt="Synthetic warehouse photograph of an empty return mailer" /><figcaption>0 garments · inbound 0.04 kg</figcaption></figure>
               </div>
               <button type="button" className="button button--primary" disabled={evidenceReviewed} onClick={() => setEvidenceReviewed(true)}><ClipboardCheck aria-hidden="true" /> {evidenceReviewed ? 'Evidence comparison recorded' : 'Record evidence review'}</button>
               {evidenceReviewed ? <DemoStatus><ShieldCheck aria-hidden="true" /><span><strong>Policy RET-HV-04 applies</strong>High value + material weight mismatch + complete inspection → reversible hold and human review.</span><button type="button" aria-label="Continue from evidence review to set resolution" onClick={() => continueToDemo('set-refund')}>Set resolution <ArrowRight aria-hidden="true" /></button></DemoStatus> : null}
@@ -425,7 +425,7 @@ export function ToolsPage() {
         )
 
       case 'set-refund': {
-        const amounts = { full: ['$1,849.00', '$0.00'], partial: ['$924.50', '$924.50'], hold: ['$0.00 now', '$1,849.00'] }
+        const amounts = { full: ['$116.00', '$0.00'], partial: ['$58.00', '$58.00'], hold: ['$0.00 now', '$116.00'] }
         return (
           <>
             <StageRail labels={['Evidence', 'Resolution', 'Record']} active={resolutionRecorded ? 2 : 1} />
@@ -435,7 +435,7 @@ export function ToolsPage() {
                 <div className="tools-resolution-choices" role="group" aria-label="Refund resolution">
                   {(['full', 'partial', 'hold'] as const).map((value) => <button key={value} type="button" className={resolution === value ? 'active' : ''} aria-pressed={resolution === value} onClick={() => { setResolution(value); setResolutionRecorded(false) }}><strong>{value === 'full' ? 'Full refund' : value === 'partial' ? 'Partial refund' : 'Temporary hold'}</strong><span>{value === 'full' ? 'Verified match' : value === 'partial' ? '1 of 2 units verified' : 'Evidence needs review'}</span></button>)}
                 </div>
-                <dl><div><dt>Refund now</dt><dd>{amounts[resolution][0]}</dd></div><div><dt>Withhold</dt><dd>{amounts[resolution][1]}</dd></div><div><dt>Cap</dt><dd>$1,849.00 eligible</dd></div></dl>
+                <dl><div><dt>Refund now</dt><dd>{amounts[resolution][0]}</dd></div><div><dt>Withhold</dt><dd>{amounts[resolution][1]}</dd></div><div><dt>Cap</dt><dd>$116.00 eligible</dd></div></dl>
                 <button type="button" className="button button--primary" disabled={resolutionRecorded} onClick={() => setResolutionRecorded(true)}><UserCheck aria-hidden="true" /> {resolutionRecorded ? 'Human resolution recorded' : 'Record human resolution'}</button>
                 <p className="sr-only" role="status" aria-live="polite">{resolutionRecorded ? `Human resolution recorded: ${resolution}.` : ''}</p>
               </div>
@@ -452,7 +452,7 @@ export function ToolsPage() {
               <div className="tools-demo-heading"><Badge tone="violet">SIMULATED DRAFT · LIVE PATH AVAILABLE</Badge><h3>Review the customer-message contract</h3><p>This fixed synthetic preview demonstrates policy-bound, non-accusatory copy. The full intake workflow can request an OpenAI draft and binds approval to its exact content hash.</p></div>
               <div className="tools-message-card">
                 <div className="tools-message-tabs" role="group" aria-label="Communication channel"><button type="button" className={channel === 'email' ? 'active' : ''} aria-pressed={channel === 'email'} onClick={() => { setChannel('email'); setMessageApproved(false) }}>Email</button><button type="button" className={channel === 'sms' ? 'active' : ''} aria-pressed={channel === 'sms'} onClick={() => { setChannel('sms'); setMessageApproved(false) }}>SMS</button></div>
-                <div className="tools-message-body"><small>{channel === 'email' ? 'SUBJECT · More information about return RMA-8821' : 'TEXT PREVIEW'}</small><p>{channel === 'email' ? 'Our inspection did not observe the two Juniper Arc One cameras expected in your return. Your refund is temporarily on hold while we review the evidence. If anything may have been packed or labeled differently, reply with details or supporting photos so a second reviewer can check the record.' : 'Juniper Circuit: Return RMA-8821 is temporarily paused because the expected items were not observed. Reply with context or evidence for a second review.'}</p><div><span><img src="/evidence/catalog-juniper-arc-one.png" alt="" />Original SKU</span><span><img src="/evidence/return-empty-box.png" alt="" />Inspection evidence</span></div></div>
+                <div className="tools-message-body"><small>{channel === 'email' ? 'SUBJECT · More information about return RMA-8821' : 'TEXT PREVIEW'}</small><p>{channel === 'email' ? 'Our inspection did not observe the two Fits Everybody Cami Bodysuits expected in your return. Your refund is temporarily on hold while we review the evidence. If anything may have been packed or labeled differently, reply with details or supporting photos so a second reviewer can check the record.' : 'SKIMS: Return RMA-8821 is temporarily paused because the expected items were not observed. Reply with context or evidence for a second review.'}</p><div><span><img src="/evidence/catalog-fits-everybody-bodysuit.png" alt="" />Original SKU</span><span><img src="/evidence/return-empty-box.png" alt="" />Inspection evidence</span></div></div>
                 <button type="button" className="button button--primary" disabled={messageApproved} onClick={() => setMessageApproved(true)}><ShieldCheck aria-hidden="true" /> {messageApproved ? 'Preview marked approved locally' : 'Approve preview draft'}</button>
                 <p className="sr-only" role="status" aria-live="polite">{messageApproved ? 'The synthetic preview draft was marked approved in this browser only.' : ''}</p>
               </div>

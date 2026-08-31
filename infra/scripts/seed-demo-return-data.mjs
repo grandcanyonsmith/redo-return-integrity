@@ -51,12 +51,12 @@ if (!tableName || !publicBaseUrl) {
   throw new Error('The stack must expose ReturnLookupTableName and ApplicationUrl outputs.');
 }
 
-const catalogImageUrl = `${publicBaseUrl}/evidence/catalog-juniper-arc-one.png`;
+const catalogImageUrl = `${publicBaseUrl}/evidence/catalog-fits-everybody-bodysuit.png`;
 const refundPolicySnapshot = {
-  policyId: 'juniper-return-policy',
+  policyId: 'skims-returns',
   policyVersion: '2026-08-24.v1',
   currency: 'USD',
-  maxEligibleRefundCents: 184900,
+  maxEligibleRefundCents: 11600,
   allowPartialRefund: true,
   quantityProration: true,
   damagedItemRefundPercent: 50,
@@ -69,8 +69,8 @@ const refundPolicySnapshotSha256 = createHash('sha256')
 
 const profiles = [
   {
-    returnRecordId: 'ret-jc-1042',
-    orderId: 'JC-1042',
+    returnRecordId: 'ret-sk-1042',
+    orderId: 'SK-1042',
     rma: 'RMA-8821',
     trackingNumber: '1Z-REDO-8821',
     labelId: 'LBL-8821',
@@ -86,8 +86,8 @@ const profiles = [
     },
   },
   {
-    returnRecordId: 'ret-jc-1048',
-    orderId: 'JC-1048',
+    returnRecordId: 'ret-sk-1048',
+    orderId: 'SK-1048',
     rma: 'RMA-EMPTY-1048',
     trackingNumber: '1Z-REDO-1048',
     labelId: 'LBL-EMPTY-1048',
@@ -103,8 +103,8 @@ const profiles = [
     },
   },
   {
-    returnRecordId: 'ret-jc-1051',
-    orderId: 'JC-1051',
+    returnRecordId: 'ret-sk-1051',
+    orderId: 'SK-1051',
     rma: 'RMA-DAMAGE-1051',
     trackingNumber: '1Z-REDO-1051',
     labelId: 'LBL-DAMAGE-1051',
@@ -120,8 +120,8 @@ const profiles = [
     },
   },
   {
-    returnRecordId: 'ret-jc-1056',
-    orderId: 'JC-1056',
+    returnRecordId: 'ret-sk-1056',
+    orderId: 'SK-1056',
     rma: 'RMA-WRONG-1056',
     trackingNumber: '1Z-REDO-1056',
     labelId: 'LBL-WRONG-1056',
@@ -137,8 +137,8 @@ const profiles = [
     },
   },
   {
-    returnRecordId: 'ret-jc-1060',
-    orderId: 'JC-1060',
+    returnRecordId: 'ret-sk-1060',
+    orderId: 'SK-1060',
     rma: 'RMA-IMITATION-1060',
     trackingNumber: '1Z-REDO-1060',
     labelId: 'LBL-IMITATION-1060',
@@ -160,22 +160,22 @@ const profiles = [
   schemaVersion: 1,
   synthetic: true,
   merchant: {
-    merchantId: 'juniper-circuit-demo',
-    name: 'Juniper Circuit',
+    merchantId: 'skims',
+    name: 'SKIMS',
   },
   status: 'DELIVERED_PENDING_INSPECTION',
   requestedResolution: 'REFUND',
   returnRequest: {
-    requestedRefundCents: 184900,
+    requestedRefundCents: 11600,
     currency: 'USD',
     requestedAt: '2026-08-24T14:00:00.000Z',
   },
-  returnReason: 'Changed mind',
+  returnReason: 'Ordered two sizes',
   receivedAt: '2026-08-24T14:30:00.000Z',
   order: {
     orderId: profile.orderId,
     currency: 'USD',
-    orderTotalCents: 184900,
+    orderTotalCents: 11600,
     paymentProcessor: 'TEST_SHOPIFY_PAYMENTS',
     paymentLast4: '4242',
   },
@@ -187,18 +187,18 @@ const profiles = [
   customer: profile.customer,
   expectedItems: [
     {
-      sku: 'JC-ARC-ONE-KIT',
-      title: 'Juniper Arc One two-camera kit',
-      variant: 'Matte black / two pack',
+      sku: 'SK-FE-CAMI-BODYSUIT',
+      title: 'Fits Everybody Cami Bodysuit',
+      variant: 'Onyx / sizes M and L',
       quantity: 2,
-      unitRefundableCents: 92450,
-      totalRefundableCents: 184900,
-      expectedSerials: ['JCA1-88K2', 'JCA1-91M7'],
+      unitRefundableCents: 5800,
+      totalRefundableCents: 11600,
+      expectedSerials: [],
       catalogImageUrl,
     },
   ],
   shipping: {
-    expectedPackedWeightGrams: 1800,
+    expectedPackedWeightGrams: 380,
     carrierRecordedWeightGrams: 1120,
   },
   refundPolicy: {

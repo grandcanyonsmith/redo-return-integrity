@@ -9,6 +9,8 @@ import {
   DecisionTargetSchema,
   EvidenceArtifactSchema,
   IntakeEvidencePurposeSchema,
+  OperatorProfileSchema,
+  demoOperatorDirectory,
   appendActionEvent,
   attachHumanDecision,
   checkpointById,
@@ -93,6 +95,11 @@ const intakeUploadBodySchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/i),
 });
 
+const authLoginBodySchema = z.object({
+  stationId: z.string().trim().min(2).max(40),
+  pin: z.string().trim().min(3).max(12),
+});
+
 const completeIntakeUploadBodySchema = z.object({
   purpose: IntakeEvidencePurposeSchema,
   objectKey: z.string().min(1).max(1_024),
@@ -130,7 +137,7 @@ const corsHeaders = (origin: string | undefined): Record<string, string> => {
     "x-content-type-options": "nosniff",
     "referrer-policy": "no-referrer",
     "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
-    "access-control-allow-methods": "GET,POST,DELETE,OPTIONS",
+    "access-control-allow-methods": "GET,POST,PUT,DELETE,OPTIONS",
     "access-control-allow-headers": "content-type,x-demo-session,mcp-protocol-version,mcp-method,mcp-name,mcp-session-id,last-event-id",
     "access-control-max-age": "600",
     vary: "Origin",
@@ -217,6 +224,8 @@ const statusForError = (error: unknown): { status: number; code: string; message
   if (error instanceof z.ZodError || error instanceof SyntaxError) return { status: 400, code: "INVALID_REQUEST", message: "The request did not match the documented contract." };
   const code = error instanceof Error ? error.message : "INTERNAL_ERROR";
   if (code === "SESSION_NOT_FOUND") return { status: 401, code, message: "Create or refresh an anonymous demo session." };
+  if (code === "INVALID_CREDENTIALS") return { status: 401, code, message: "The station ID or PIN did not match a seeded demo operator." };
+  if (code === "VOICE_CALLS_DISABLED") return { status: 409, code, message: "Voice calls are disabled in this station's settings." };
   if (["SESSION_EVALUATION_LIMIT", "DAILY_EVALUATION_LIMIT"].includes(code)) return { status: 429, code, message: "The bounded demo model-evaluation limit has been reached." };
   if (["UPLOAD_SESSION_LIMIT", "DAILY_UPLOAD_LIMIT"].includes(code)) return { status: 429, code, message: "The bounded demo upload-policy limit has been reached." };
   if (code.endsWith("NOT_FOUND")) return { status: 404, code, message: "The requested resource was not found in this demo session." };
@@ -292,8 +301,8 @@ const physicalScenarioEvidence = (
   });
   const scenario = normalized === "wrong-item"
     ? {
-        observedWeightGrams: 430,
-        observedSku: "JC-BASIC-MOUSE",
+        observedWeightGrams: 205,
+        observedSku: "NON-CATALOG-TEE",
         observedQuantity: 1,
         observedSerials: [] as string[],
         fixtureUrl: syntheticImageFixtures.wrongItem,
@@ -301,7 +310,7 @@ const physicalScenarioEvidence = (
       }
     : normalized === "inconclusive"
       ? {
-          observedWeightGrams: 1765,
+          observedWeightGrams: 352,
           observedSku: undefined,
           observedQuantity: undefined,
           observedSerials: undefined,
@@ -309,10 +318,10 @@ const physicalScenarioEvidence = (
           disposition: "INCONCLUSIVE",
         }
       : {
-          observedWeightGrams: 940,
-          observedSku: "JC-ARC-ONE-KIT",
+          observedWeightGrams: 192,
+          observedSku: "SK-FE-CAMI-BODYSUIT",
           observedQuantity: 1,
-          observedSerials: ["JCA1-UNKNOWN"],
+          observedSerials: ["SK-EPC-UNKNOWN"],
           fixtureUrl: syntheticImageFixtures.possibleImitation,
           disposition: normalized === "quantity-mismatch" ? "QUANTITY_MISMATCH" : "POSSIBLE_IMITATION_REQUIRES_QUALIFIED_REVIEW",
         };
@@ -324,9 +333,9 @@ const physicalScenarioEvidence = (
       sourceSystem: "redo-warehouse-scale",
       provenanceTier: "E4",
       facts: {
-        expectedWeightGrams: 1800,
+        expectedWeightGrams: 380,
         observedWeightGrams: scenario.observedWeightGrams,
-        weightToleranceGrams: 90,
+        weightToleranceGrams: 25,
         scaleCalibrationStatus: "PASS",
         observedReturnLabel: "RMA-8821",
       },
@@ -339,9 +348,9 @@ const physicalScenarioEvidence = (
       fixtureUrl: scenario.fixtureUrl,
       facts: {
         captureProtocol: "INBOUND_SIX_VIEW",
-        expectedSku: "JC-ARC-ONE-KIT",
+        expectedSku: "SK-FE-CAMI-BODYSUIT",
         expectedQuantity: 2,
-        expectedSerials: ["JCA1-88K2", "JCA1-91M7"],
+        expectedSerials: ["SK-EPC-88K2", "SK-EPC-91M7"],
         ...(scenario.observedSku === undefined ? {} : { observedSku: scenario.observedSku }),
         ...(scenario.observedQuantity === undefined ? {} : { observedQuantity: scenario.observedQuantity }),
         ...(scenario.observedSerials === undefined ? {} : { observedSerials: scenario.observedSerials }),
@@ -430,6 +439,33 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
       }, origin, [cookie]);
     }
 
+    if (method === "POST" && path === "/auth/login") {
+      const body = authLoginBodySchema.parse(parseJson(event));
+      // Seeded, public demo fixtures — this is a workstation gate, not real
+      // credential verification. No real secrets exist to protect here.
+      const entry = demoOperatorDirectory.find(
+        (candidate) => candidate.stationId.toLowerCase() === body.stationId.toLowerCase() && candidate.pin === body.pin,
+      );
+      if (!entry) throw new Error("INVALID_CREDENTIALS");
+      const session = await store.createSession();
+      const operator = OperatorProfileSchema.parse({
+        operatorId: `op-${entry.stationId.toLowerCase()}`,
+        stationId: entry.stationId,
+        displayName: entry.displayName,
+        role: entry.role,
+        identityAssurance: "DEMO_STATION_PIN",
+        loggedInAt: new Date().toISOString(),
+      });
+      await intakeStore.putOperatorProfile(session.sessionId, operator);
+      const cookie = `redo_demo_session=${encodeURIComponent(session.sessionId)}; Max-Age=86400; Path=/; HttpOnly; Secure; SameSite=Strict`;
+      return response(201, {
+        session,
+        sessionToken: session.sessionId,
+        operator,
+        identityAssurance: "DEMO_STATION_PIN",
+      }, origin, [cookie]);
+    }
+
     if (method === "POST" && path === "/waitlist") {
       const body = waitlistBodySchema.parse(parseJson(event));
       const submittedAt = new Date();
@@ -513,6 +549,46 @@ export const createHandler = (providedStore?: DataStore, dependencies: HandlerDe
     if (method === "POST" && path === "/intake/communications/queue") {
       const result = await intakeService.queueTestCommunication(sessionId, parseJson(event));
       return response(202, result, origin);
+    }
+
+    if (method === "GET" && path === "/intake/activity") {
+      const result = await intakeService.listIntakeActivity(sessionId);
+      return response(200, result, origin);
+    }
+
+    if (method === "GET" && path === "/intake/portfolio") {
+      return response(200, await intakeService.listRefundPortfolio(sessionId, event.queryStringParameters ?? {}), origin);
+    }
+
+    if (method === "GET" && path === "/auth/me") {
+      return response(200, { operator: (await intakeStore.getOperatorProfile(sessionId)) ?? null }, origin);
+    }
+
+    if (method === "POST" && path === "/auth/logout") {
+      // Demo sessions are 24h-TTL and hold only synthetic data; the client
+      // drops its token and the abandoned session expires on its own.
+      const expired = "redo_demo_session=; Max-Age=0; Path=/; HttpOnly; Secure; SameSite=Strict";
+      return response(200, { loggedOut: true }, origin, [expired]);
+    }
+
+    if (method === "GET" && path === "/intake/settings") {
+      return response(200, await intakeService.getOperatorSettings(sessionId), origin);
+    }
+
+    if (method === "PUT" && path === "/intake/settings") {
+      return response(200, await intakeService.updateOperatorSettings(sessionId, parseJson(event)), origin);
+    }
+
+    if (method === "POST" && path === "/intake/dispositions") {
+      return response(201, await intakeService.recordIntakeDisposition(sessionId, parseJson(event)), origin);
+    }
+
+    if (method === "POST" && path === "/intake/calls/session") {
+      return response(201, await intakeService.createRealtimeCallSession(sessionId, parseJson(event)), origin);
+    }
+
+    if (method === "POST" && path === "/intake/calls/outcome") {
+      return response(201, await intakeService.recordCallOutcome(sessionId, parseJson(event, 200_000)), origin);
     }
 
     if (path === "/mcp") {

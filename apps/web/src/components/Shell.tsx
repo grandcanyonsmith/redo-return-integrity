@@ -22,31 +22,31 @@ import { useDemo } from '../lib/demo-context'
 import { workQueue } from '../lib/work-queue'
 
 const primaryNavigation = [
-  { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
-  { to: '/intake', label: 'Scan return', icon: ScanBarcode, end: false },
-  { to: '/operator', label: 'Warehouse', icon: Warehouse, end: false },
-  { to: '/merchant', label: 'Merchant', icon: Store, end: false },
+  { to: '/legacy', label: 'Dashboard', icon: LayoutDashboard, end: true },
+  { to: '/legacy/intake', label: 'Scan return', icon: ScanBarcode, end: false },
+  { to: '/legacy/operator', label: 'Warehouse', icon: Warehouse, end: false },
+  { to: '/legacy/merchant', label: 'Merchant', icon: Store, end: false },
 ] as const
 
 const exploreNavigation = [
-  { to: '/tools', label: 'Live demos', icon: MousePointerClick, end: false },
-  { to: '/shopper?journey=checkout', activePath: '/shopper', label: 'Shopper journey', icon: UserRound, end: false },
-  { to: '/lifecycle', label: 'Decision map', icon: GitBranch, end: false },
-  { to: '/lab', label: 'Evaluation lab', icon: FlaskConical, end: false },
-  { to: '/product', label: 'Product overview', icon: Sparkles, end: false },
+  { to: '/legacy/tools', label: 'Live demos', icon: MousePointerClick, end: false },
+  { to: '/legacy/shopper?journey=checkout', activePath: '/legacy/shopper', label: 'Shopper journey', icon: UserRound, end: false },
+  { to: '/legacy/lifecycle', label: 'Decision map', icon: GitBranch, end: false },
+  { to: '/legacy/lab', label: 'Evaluation lab', icon: FlaskConical, end: false },
+  { to: '/legacy/product', label: 'Product overview', icon: Sparkles, end: false },
 ] as const
 
 const routeTitles: Record<string, string> = {
-  '/': 'Operations dashboard',
-  '/product': 'Product overview',
-  '/lifecycle': 'Decision lifecycle',
-  '/shopper': 'Shopper journeys',
-  '/tools': 'Interactive demos',
-  '/merchant': 'Merchant review',
-  '/operator': 'Warehouse review',
-  '/intake': 'Scan return',
-  '/lab': 'Evaluation lab',
-  '/reset': 'Reset demo',
+  '/legacy': 'Operations dashboard',
+  '/legacy/product': 'Product overview',
+  '/legacy/lifecycle': 'Decision lifecycle',
+  '/legacy/shopper': 'Shopper journeys',
+  '/legacy/tools': 'Interactive demos',
+  '/legacy/merchant': 'Merchant review',
+  '/legacy/operator': 'Warehouse review',
+  '/legacy/intake': 'Scan return',
+  '/legacy/lab': 'Evaluation lab',
+  '/legacy/reset': 'Reset demo',
 }
 
 export function Shell() {
@@ -150,7 +150,7 @@ export function Shell() {
     <div className="app-shell">
       <a className="skip-link" href="#main-content">Skip to main content</a>
       <header className="topbar">
-        <Link to="/" className="brand" aria-label="Redo Return Integrity home">
+        <Link to="/legacy" className="brand" aria-label="Redo Return Integrity legacy home">
           <span className="brand__mark">redo</span>
           <span className="brand__product">Return Integrity</span>
         </Link>
@@ -198,7 +198,7 @@ export function Shell() {
               <ArrowRight size={15} aria-hidden="true" />
             </Link>
           ) : !nextItem ? (
-            <Link className="topbar__continue" to="/reset">
+            <Link className="topbar__continue" to="/legacy/reset">
               <span className="topbar__continue-prefix">Complete</span>
               <span className="topbar__continue-label">Reset</span>
               <RotateCcw size={15} aria-hidden="true" />
@@ -227,7 +227,7 @@ export function Shell() {
         <p><ShieldCheck size={15} aria-hidden="true" /> OpenAI recommends. Policy constrains. People own adverse decisions.</p>
         <div className="footer__links">
           <a href="https://github.com/grandcanyonsmith/redo-return-integrity" target="_blank" rel="noreferrer"><Github size={14} aria-hidden="true" /> Source</a>
-          <Link to="/reset"><RotateCcw size={14} aria-hidden="true" /> Reset demo</Link>
+          <Link to="/legacy/reset"><RotateCcw size={14} aria-hidden="true" /> Reset demo</Link>
         </div>
       </footer>
     </div>

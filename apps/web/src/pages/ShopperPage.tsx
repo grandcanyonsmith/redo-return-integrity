@@ -50,11 +50,11 @@ export function ShopperPage() {
 
   return (
     <div className="page shopper-page">
-      <PageIntro eyebrow="SHOPPER EXPERIENCE" title={<>Suspicion should feel like a <em>solvable task.</em></>} description="Juniper Circuit shoppers see exactly what is needed, why it is needed, how long it will take, and what alternatives remain. A failed or declined challenge is never labeled fraud." actions={<Badge tone="green" icon={ShieldCheck}>Good-actor recovery first</Badge>} />
+      <PageIntro eyebrow="SHOPPER EXPERIENCE" title={<>Suspicion should feel like a <em>solvable task.</em></>} description="SKIMS shoppers see exactly what is needed, why it is needed, how long it will take, and what alternatives remain. A failed or declined challenge is never labeled fraud." actions={<Badge tone="green" icon={ShieldCheck}>Good-actor recovery first</Badge>} />
 
       <div className="persona-bar">
         <div className="avatar avatar--shopper">AM</div>
-        <div><small>Signed in as shopper</small><strong>Alex Morgan · Order #JC-1042</strong></div>
+        <div><small>Signed in as shopper</small><strong>Alex Morgan · Order #SK-1042</strong></div>
         <span className="persona-bar__spacer" />
         <Badge tone={state.checkout === 'cleared' ? 'green' : 'orange'}>{state.checkout === 'cleared' ? 'Order verified' : 'Action available'}</Badge>
       </div>
@@ -90,16 +90,16 @@ export function ShopperPage() {
             </header>
             {state.checkout === 'cleared' ? (
               <div className="journey-complete-block">
-                <div className="success-panel"><CheckCircle2 aria-hidden="true" /><div><strong>Order #JC-1042 is released</strong><p>You verified using {formatStatus(state.checkoutMethod ?? 'alternate method')}. This check does not add a fraud label to your account.</p></div></div>
-                <div className="journey-next-actions"><button type="button" className="button button--primary" onClick={() => selectTab('return')}>Next: resolve the return handoff <ArrowRight size={16} aria-hidden="true" /></button><Link className="button button--secondary" to="/">Back to dashboard</Link></div>
+                <div className="success-panel"><CheckCircle2 aria-hidden="true" /><div><strong>Order #SK-1042 is released</strong><p>You verified using {formatStatus(state.checkoutMethod ?? 'alternate method')}. This check does not add a fraud label to your account.</p></div></div>
+                <div className="journey-next-actions"><button type="button" className="button button--primary" onClick={() => selectTab('return')}>Next: resolve the return handoff <ArrowRight size={16} aria-hidden="true" /></button><Link className="button button--secondary" to="/legacy">Back to dashboard</Link></div>
               </div>
             ) : (
               <>
-                <p>Your $1,849 order is shipping to a new address. Juniper Circuit asks for one additional proof that you control the payment or contact method. This is not an accusation.</p>
+                <p>Your $116.00 order is shipping to a new address. SKIMS asks for one additional proof that you control the payment or contact method. This is not an accusation.</p>
                 <div className="why-card"><AlertCircle aria-hidden="true" /><div><strong>Why am I seeing this?</strong><span>New delivery address + high order value. We do not use protected traits or infer identity from your photos.</span></div></div>
                 <div className="verification-options">
                   <button onClick={() => verify('email-payment')}><span><MailCheck aria-hidden="true" /><div><strong>Email + payment check</strong><small>Code to alex@example.com and card ending 2048</small></div></span><ArrowRight aria-hidden="true" /></button>
-                  <button onClick={() => verify('3ds')}><span><Smartphone aria-hidden="true" /><div><strong>Verify with your bank</strong><small>Secure 3DS approval; no ID document shared with Juniper</small></div></span><ArrowRight aria-hidden="true" /></button>
+                  <button onClick={() => verify('3ds')}><span><Smartphone aria-hidden="true" /><div><strong>Verify with your bank</strong><small>Secure 3DS approval; no ID document shared with SKIMS</small></div></span><ArrowRight aria-hidden="true" /></button>
                   <button onClick={() => verify('support')}><span><Headphones aria-hidden="true" /><div><strong>Use assisted support</strong><small>Accessibility-friendly review with a trained teammate</small></div></span><ArrowRight aria-hidden="true" /></button>
                 </div>
                 <p className="gentle-note"><X aria-hidden="true" size={15} /> If you leave, we record “challenge not completed,” not “fraud.” Inventory is held for 30 minutes.</p>
@@ -108,7 +108,7 @@ export function ShopperPage() {
           </article>
           <aside className="order-summary">
             <span className="eyebrow">ORDER SUMMARY</span>
-            <div className="product-mini"><div className="product-mini__art"><PackageOpen aria-hidden="true" /></div><div><strong>Juniper Arc One</strong><span>2-camera field kit · Graphite</span><small>2 cameras · 1 kit</small></div><b>$1,849.00</b></div>
+            <div className="product-mini"><div className="product-mini__art"><PackageOpen aria-hidden="true" /></div><div><strong>Fits Everybody Cami Bodysuit</strong><span>Onyx · sizes M and L</span><small>2 pieces · 1 mailer</small></div><b>$116.00</b></div>
             <dl><div><dt>Shipping</dt><dd>Complimentary</dd></div><div><dt>Tax</dt><dd>$137.21</dd></div><div><dt>Total</dt><dd>$1,986.21</dd></div></dl>
             <p><Clock3 size={14} aria-hidden="true" /> Ships today after verification</p>
           </aside>
@@ -119,7 +119,7 @@ export function ShopperPage() {
         <section id="shopper-panel-return" role="tabpanel" aria-labelledby="shopper-tab-return" className="journey-layout" tabIndex={0}>
           <article className="shopper-task">
             <header className="shopper-task__header"><span className={`status-orb ${state.reverseLogistics === 'cleared' ? 'status-orb--good' : ''}`}>{state.reverseLogistics === 'cleared' ? <Check /> : '!'}</span><div><Badge tone={state.reverseLogistics === 'cleared' ? 'green' : 'orange'}>{state.reverseLogistics === 'cleared' ? 'RESOLVED' : 'RETURN PAUSED'}</Badge><h2>{state.reverseLogistics === 'cleared' ? 'Your return is moving again.' : 'Help us confirm your drop-off'}</h2></div></header>
-            {state.reverseLogistics === 'cleared' ? <div className="journey-complete-block"><div className="success-panel"><CheckCircle2 /><div><strong>Receipt matched return RMA-8821</strong><p>The carrier’s delayed scan caused the route mismatch. Your refund timing is restored and no adverse label was applied.</p></div></div><div className="journey-next-actions"><Link className="button button--primary" to="/operator">Next: review the physical return <ArrowRight size={16} aria-hidden="true" /></Link><Link className="button button--secondary" to="/">Back to dashboard</Link></div></div> : <>
+            {state.reverseLogistics === 'cleared' ? <div className="journey-complete-block"><div className="success-panel"><CheckCircle2 /><div><strong>Receipt matched return RMA-8821</strong><p>The carrier’s delayed scan caused the route mismatch. Your refund timing is restored and no adverse label was applied.</p></div></div><div className="journey-next-actions"><Link className="button button--primary" to="/legacy/operator">Next: review the physical return <ArrowRight size={16} aria-hidden="true" /></Link><Link className="button button--secondary" to="/legacy">Back to dashboard</Link></div></div> : <>
               <p>The carrier reported a scan 620 miles from your selected drop-off only 18 minutes after label creation. That route is physically inconsistent, but carrier scans can be delayed or wrong.</p>
               <div className="timeline-mini"><span><i className="good" />10:02 AM<small>QR label created · Denver, CO</small></span><span><i className="warn" />10:20 AM<small>Carrier ingest · Omaha, NE</small></span></div>
               <div className="upload-zone" onClick={() => fileRef.current?.click()} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); fileRef.current?.click() } }} role="button" tabIndex={0}><Upload aria-hidden="true" /><strong>{receiptName || 'Select a staffed drop-off receipt image'}</strong><span>JPEG, PNG, or WebP · up to 5 MB · local demo selection only, not uploaded</span><input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) { setReceiptError('Choose a JPEG, PNG, or WebP image no larger than 5 MB.'); setReceiptName(''); return } setReceiptError(''); setReceiptName(file.name); update({ reverseLogistics: 'receipt-reviewed' }) }} /></div>
@@ -139,13 +139,13 @@ export function ShopperPage() {
               <EmptyNotice
                 icon={ShieldCheck}
                 title="No adverse decision to contest"
-                actions={<Link className="button button--secondary button--small" to="/merchant">Open merchant console</Link>}
+                actions={<Link className="button button--secondary button--small" to="/legacy/merchant">Open merchant console</Link>}
               >
                 A shopper appeal becomes available only after an authorized merchant reviewer makes an adverse decision. The model cannot create one.
               </EmptyNotice>
             ) : <>
               <header className="shopper-task__header"><span className="status-orb">!</span><div><Badge tone={state.physical === 'appealed' ? 'blue' : 'orange'}>{state.physical === 'appealed' ? 'SECOND REVIEW PENDING' : '48-HOUR CONTEST WINDOW'}</Badge><h2>{state.physical === 'appealed' ? 'Your appeal details are recorded.' : 'Tell us what we may have missed'}</h2></div></header>
-              <p>Juniper Circuit’s reviewer found no Arc One camera kit in the returned parcel. You can correct the record before the refund decision becomes final.</p>
+              <p>The SKIMS reviewer found no bodysuits in the returned mailer. You can correct the record before the refund decision becomes final.</p>
               <label className="field-label">Your explanation<textarea rows={5} value={appealText} disabled={state.physical === 'appealed'} onChange={(event) => setAppealText(event.target.value)} /></label>
               <button type="button" className="upload-zone upload-zone--small" disabled={state.physical === 'appealed'} onClick={() => appealFileRef.current?.click()}><Upload aria-hidden="true" /><strong>{appealEvidenceName || 'Add receipts, photos, or carrier correspondence'}</strong><span>{state.physical === 'appealed' ? 'Filename recorded in this browser-local scenario · file contents were not uploaded' : 'Optional · local demo selection only · JPEG, PNG, or WebP up to 5 MB'}</span></button>
               <input ref={appealFileRef} className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={state.physical === 'appealed'} onChange={(event) => { const file = event.target.files?.[0]; if (!file) return; if (!['image/jpeg','image/png','image/webp'].includes(file.type) || file.size > 5 * 1024 * 1024) { setAppealEvidenceError('Choose a JPEG, PNG, or WebP image no larger than 5 MB.'); setAppealEvidenceName(''); return } setAppealEvidenceError(''); setAppealEvidenceName(file.name) }} />

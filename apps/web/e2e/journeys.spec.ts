@@ -8,9 +8,9 @@ test('good actor completes an alternate checkout verification', async ({ page })
 })
 
 test('dashboard tasks open the exact shopper journey', async ({ page }) => {
-  await page.goto('/')
+  await page.goto('/legacy')
   await page.getByRole('link', { name: /impossible logistics/i }).click()
-  await expect(page).toHaveURL(/\/shopper\?journey=return$/)
+  await expect(page).toHaveURL(/\/legacy\/shopper\?journey=return$/)
   await expect(page.getByRole('tab', { name: /return handoff/i })).toHaveAttribute('aria-selected', 'true')
   await expect(page.getByRole('tabpanel', { name: /return handoff/i })).toBeVisible()
 })
@@ -63,7 +63,7 @@ test('adverse return outcome requires a human and opens shopper appeal', async (
 
 test('dashboard and evaluation lab fit a 320px viewport', async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 800 })
-  for (const path of ['/', '/lab']) {
+  for (const path of ['/legacy', '/legacy/lab']) {
     await page.goto(path)
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
     expect(overflow, `${path} should not overflow horizontally`).toBe(false)
@@ -84,7 +84,7 @@ test('merchant scans a test label and receives a human-gated structured inspecti
   await page.getByRole('button', { name: /run synthetic label tool/i }).click()
   await expect(page.getByText(/return record matched/i)).toBeVisible()
   await expect(page.locator('input[type=file][capture=environment]')).toHaveCount(2)
-  await expect(page.getByRole('region', { name: /merchant policy snapshot/i })).toContainText('juniper-return-policy')
+  await expect(page.getByRole('region', { name: /merchant policy snapshot/i })).toContainText('skims-returns')
   await expect(page.getByRole('region', { name: /merchant policy snapshot/i })).toContainText('USD')
   await page.getByRole('button', { name: /analyze contents against order/i }).click()
   await expect(page.getByText(/schema-validated output/i)).toBeVisible()
@@ -98,8 +98,10 @@ test('merchant scans a test label and receives a human-gated structured inspecti
   expect(overflow).toBe(false)
   await page.getByRole('checkbox', { name: /i reviewed the source images/i }).check()
   await page.getByRole('button', { name: /persist human review/i }).click()
-  await expect(page.getByText(/review was not persisted/i)).toBeVisible()
-  await expect(page.getByRole('button', { name: /queue test shopper message/i })).toBeDisabled()
+  // The dev server hosts the Lambda API in-process, so the review persists.
+  await expect(page.getByText(/review persisted · no funds moved/i)).toBeVisible()
+  await page.getByRole('button', { name: /queue test shopper message/i }).click()
+  await expect(page.getByText(/queued in test outbox/i)).toBeVisible()
 })
 
 test('interactive tools gallery advances in-frame and deep-links to the full journeys', async ({ page }) => {
@@ -118,7 +120,7 @@ test('interactive tools gallery advances in-frame and deep-links to the full jou
 
   await page.getByRole('tab', { name: /shopper/i }).click()
   await expect(page.getByRole('heading', { name: /one quick check before we ship/i })).toBeVisible()
-  await expect(page.getByRole('link', { name: /^open checkout journey$/i })).toHaveAttribute('href', '/shopper?journey=checkout')
+  await expect(page.getByRole('link', { name: /^open checkout journey$/i })).toHaveAttribute('href', '/legacy/shopper?journey=checkout')
 
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth > document.documentElement.clientWidth + 1)
   expect(overflow).toBe(false)

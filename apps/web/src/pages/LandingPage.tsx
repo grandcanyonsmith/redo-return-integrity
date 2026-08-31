@@ -42,8 +42,8 @@ export function LandingPage() {
           <h1>Catch the return.<br /><em>Keep the customer.</em></h1>
           <p className="hero__lede">A decision and evidence layer that helps Redo prevent empty-box, decoy, wrong-item, imitation, and quantity fraud — while giving every good shopper a clear path forward.</p>
           <div className="hero__actions">
-            <Link className="button button--primary" to="/">Open operations dashboard <ArrowRight aria-hidden="true" size={17} /></Link>
-            <Link className="button button--ghost-light" to="/lifecycle">Explore 15 checkpoints <GitBranch aria-hidden="true" size={17} /></Link>
+            <Link className="button button--primary" to="/legacy">Open operations dashboard <ArrowRight aria-hidden="true" size={17} /></Link>
+            <Link className="button button--ghost-light" to="/legacy/lifecycle">Explore 15 checkpoints <GitBranch aria-hidden="true" size={17} /></Link>
           </div>
           <div className="hero__trust">
             <span><Check size={15} aria-hidden="true" /> Point-in-time evidence</span>
@@ -77,7 +77,7 @@ export function LandingPage() {
           <p className="eyebrow">THE PRODUCT THESIS</p>
           <h2>Ground truth makes every earlier decision smarter.</h2>
           <p>Checkout signals are useful, but only facility inspection can conclusively label what came back. The managed network creates high-quality outcome labels; the broader platform learns where and when proportionate intervention works.</p>
-          <Link to="/operator" className="text-link">See the operator capture protocol <ArrowRight size={15} aria-hidden="true" /></Link>
+          <Link to="/legacy/operator" className="text-link">See the operator capture protocol <ArrowRight size={15} aria-hidden="true" /></Link>
         </div>
         <div className="truth-loop">
           <div className="truth-loop__center"><Factory aria-hidden="true" /><strong>Ground<br />truth</strong></div>
@@ -110,7 +110,7 @@ export function LandingPage() {
       <section className="section">
         <div className="section-heading section-heading--row">
           <div><p className="eyebrow">MEASURE WHAT ACTUALLY HAPPENED</p><h2>A fraud dashboard finance can trust.</h2></div>
-          <Link to="/lab" className="button button--secondary">Open evaluation lab <ArrowRight size={16} aria-hidden="true" /></Link>
+          <Link to="/legacy/lab" className="button button--secondary">Open evaluation lab <ArrowRight size={16} aria-hidden="true" /></Link>
         </div>
         <div className="metric-grid">
           {outcomeMetrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}

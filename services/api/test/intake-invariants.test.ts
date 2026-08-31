@@ -167,13 +167,13 @@ describe("return intake semantic invariant boundary", () => {
         expectedReason: "no damage was observed",
       },
       {
-        label: "serial-controlled match without serial evidence",
+        label: "match claiming serial evidence the order never carried",
         finding: {
           ...matching,
-          observedItems: matching.observedItems.map((item) => ({ ...item, serials: [] })),
-          comparison: { ...matching.comparison, serialMatch: null },
+          observedItems: matching.observedItems.map((item) => ({ ...item, serials: ["SK-EPC-0000"] })),
+          comparison: { ...matching.comparison, serialMatch: true },
         },
-        expectedReason: "serialMatch=true",
+        expectedReason: "no unexpected serials",
       },
     ];
 

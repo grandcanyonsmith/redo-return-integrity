@@ -1,21 +1,46 @@
 import { createHash, randomUUID } from "node:crypto";
 import { z } from "zod";
 import {
+  CallResolutionSchema,
   CommunicationDraftSchema,
+  IntakeActionOptionIdSchema,
+  IntakeActivityRecordSchema,
+  IntakeCallRecordSchema,
+  IntakeDispositionRecordSchema,
+  IntakeDispositionSchema,
   LabelExtractionSchema,
   LabelLookupResultSchema,
   OperatorReviewRecordSchema,
+  OperatorSettingsSchema,
+  OperatorSettingsUpdateSchema,
   PackageInspectionSchema,
+  RefundPortfolioQuerySchema,
   TestOutboxMessageSchema,
+  buildRefundPortfolio,
+  defaultOperatorSettings,
+  deriveCallResolutionStatus,
+  deriveDispositionRecommendation,
   deriveInspectionRecommendation,
+  deriveIntakeActionOptions,
+  deriveIntakeResolutionStatus,
   enforceInspectionFindingInvariants,
   fixtureInspectionFinding,
   fixtureLabelExtraction,
+  simulatedCallScript,
   type CommunicationDraft,
+  type InspectionNextAction,
+  type IntakeActionOption,
+  type IntakeActionOptionId,
+  type IntakeActivityRecord,
+  type IntakeCallRecord,
+  type IntakeDispositionRecord,
   type LabelExtraction,
   type LabelLookupResult,
   type OperatorReviewRecord,
+  type OperatorSettings,
   type PackageInspection,
+  type RefundPortfolio,
+  type SimulatedCallTurn,
   type TestOutboxMessage,
 } from "@return-integrity/domain";
 import {
@@ -25,6 +50,7 @@ import {
   draftCommunicationWithOpenAI,
   extractLabelWithOpenAI,
 } from "./intake-openai.js";
+import { buildRealtimeCallInstructions, mintRealtimeClientSecret } from "./intake-realtime.js";
 import type { ReturnIntakeStore, ReturnLookupMatch } from "./intake-store.js";
 
 export const LabelLookupInputSchema = z.object({
@@ -64,6 +90,8 @@ export const PackageInspectionInputSchema = z.object({
   returnRecordId: z.string().min(1).max(120),
   evidenceId: z.string().min(1).max(200).optional(),
   fixtureId: z.enum(packageFixtureIds).optional(),
+  /** Content re-captures already taken; only guides the triage recommendation. */
+  retakeCount: z.number().int().min(0).max(10).optional(),
 }).refine((input) => [input.fixtureId, input.evidenceId].filter(Boolean).length === 1, {
   message: "Provide exactly one synthetic package fixture or completed-upload evidence ID.",
 });
@@ -72,6 +100,7 @@ export type PackageInspectionInput = z.infer<typeof PackageInspectionInputSchema
 export const DraftCommunicationInputSchema = z.object({
   inspectionId: z.string().min(1).max(120),
   channel: z.enum(["EMAIL", "SMS"]),
+  actionOptionId: IntakeActionOptionIdSchema.optional(),
 });
 export type DraftCommunicationInput = z.infer<typeof DraftCommunicationInputSchema>;
 
@@ -92,6 +121,52 @@ export const QueueCommunicationInputSchema = z.object({
   reviewId: z.string().min(1).max(120),
 });
 export type QueueCommunicationInput = z.infer<typeof QueueCommunicationInputSchema>;
+
+export const RecordDispositionInputSchema = z.object({
+  inspectionId: z.string().min(1).max(120),
+  disposition: IntakeDispositionSchema,
+  reason: z.string().trim().min(1).max(500).optional(),
+  recordedBy: z.string().trim().min(2).max(120),
+});
+export type RecordDispositionInput = z.infer<typeof RecordDispositionInputSchema>;
+
+export const RecordCallOutcomeInputSchema = z.object({
+  returnRecordId: z.string().min(1).max(120),
+  inspectionId: z.string().min(1).max(120),
+  mode: z.enum(["OPENAI_REALTIME", "SIMULATED"]),
+  startedAt: z.string().datetime({ offset: true }),
+  durationSeconds: z.number().int().nonnegative().max(3_600),
+  transcript: z.string().min(1).max(50_000),
+  resolution: CallResolutionSchema,
+  resolutionNote: z.string().trim().min(1).max(500).optional(),
+  operatorLabel: z.string().trim().min(2).max(120),
+});
+export type RecordCallOutcomeInput = z.infer<typeof RecordCallOutcomeInputSchema>;
+
+export const RealtimeCallSessionInputSchema = z.object({
+  returnRecordId: z.string().min(1).max(120),
+  inspectionId: z.string().min(1).max(120).optional(),
+});
+export type RealtimeCallSessionInput = z.infer<typeof RealtimeCallSessionInputSchema>;
+
+export type RealtimeCallSessionResult =
+  | {
+      mode: "OPENAI_REALTIME";
+      testMode: true;
+      clientSecret: string;
+      expiresAt: string | null;
+      model: string;
+      voice: string;
+      instructions: string;
+    }
+  | {
+      mode: "SIMULATED";
+      testMode: true;
+      reason: string;
+      script: SimulatedCallTurn[];
+      voice: string;
+      instructions: string;
+    };
 
 const fixtureImageUrls: Readonly<Record<(typeof packageFixtureIds)[number], string>> = {
   matchReturn: "/evidence/return-matching-contents.png",
@@ -366,12 +441,21 @@ export class ReturnIntakeService {
       analysisMode = "SAFE_FALLBACK";
     }
     const recommendation = deriveInspectionRecommendation({ returnRecord, finding });
+    const operatorSettings = (await this.store.getOperatorSettings(sessionId)) ?? defaultOperatorSettings();
+    const dispositionRecommendation = deriveDispositionRecommendation({
+      classification: finding.classification,
+      confidence: finding.confidence,
+      missingEvidence: finding.missingEvidence,
+      settings: operatorSettings,
+      retakeCount: input.retakeCount,
+    });
     const inspection = PackageInspectionSchema.parse({
       ...finding,
       inspectionId: randomUUID(),
       returnRecordId: returnRecord.returnRecordId,
       createdAt: this.now().toISOString(),
       ...recommendation,
+      dispositionRecommendation,
       // Persist only stable fixture references. Uploaded evidence is persisted
       // by evidence ID + immutable S3 version and materialized as a fresh URL
       // only for the current response/model call.
@@ -402,6 +486,17 @@ export class ReturnIntakeService {
     if (!inspection.communication.recommended) throw new Error("COMMUNICATION_NOT_RECOMMENDED");
     if (input.channel === "SMS" && !returnRecord.customer.phone) throw new Error("RECIPIENT_NOT_AVAILABLE");
 
+    // The intent must come from the server-derived option list for this
+    // classification; a client cannot request an intent the policy layer
+    // did not offer for this inspection.
+    let chosenOption: IntakeActionOption | undefined;
+    if (input.actionOptionId) {
+      const offeredOptions = inspection.actionOptions
+        ?? deriveIntakeActionOptions(inspection.classification);
+      chosenOption = offeredOptions.find((option) => option.id === input.actionOptionId);
+      if (!chosenOption) throw new Error("ACTION_OPTION_NOT_OFFERED");
+    }
+
     const warehouseEvidenceId = inspection.evidenceIds[0];
     const freshWarehouseEvidenceImageUrl = inspection.warehouseEvidenceImageUrl
       ?? (warehouseEvidenceId && this.resolveEvidenceImage
@@ -417,6 +512,7 @@ export class ReturnIntakeService {
       returnRecord,
       inspection: inspectionForGeneration,
       channel: input.channel,
+      templateIntent: chosenOption?.templateIntent,
       apiKey: await this.resolveApiKey(),
       fetchImpl: this.fetchImpl,
       model: this.model,
@@ -462,6 +558,10 @@ export class ReturnIntakeService {
       inspectionId: inspection.inspectionId,
       returnRecordId: returnRecord.returnRecordId,
       createdAt: this.now().toISOString(),
+      ...(chosenOption ? {
+        templateIntent: chosenOption.templateIntent,
+        actionOptionId: chosenOption.id,
+      } : {}),
       ...draftContent,
       originalProductImageUrl: returnRecord.product.imageUrl,
       // A short-lived signed URL is never written to DynamoDB.
@@ -559,14 +659,278 @@ export class ReturnIntakeService {
       review,
       this.now(),
     ));
+
+    const activity = await this.recordIntakeActivity(sessionId, draft, inspection, message);
     return {
       status: message.status,
       messageId: message.messageId,
       deliveryDisabled: true,
       message,
+      ...(activity ? { activity } : {}),
     };
   }
+
+  /**
+   * Writes the session-scoped intake outcome that powers the workstation
+   * activity feed and the post-intake resolution status. Keyed by draft ID so
+   * queue retries stay idempotent.
+   */
+  private async recordIntakeActivity(
+    sessionId: string,
+    draft: CommunicationDraft,
+    inspection: PackageInspection,
+    message: TestOutboxMessage,
+  ): Promise<IntakeActivityRecord | undefined> {
+    const returnRecord = await this.store.getReturnRecord(draft.returnRecordId);
+    if (!returnRecord) return undefined;
+    const actionOptionId = draft.actionOptionId
+      ?? fallbackActionOptionId(inspection.nextAction);
+    const templateIntent = draft.templateIntent
+      ?? (inspection.communication.templateIntent === "NONE"
+        ? "REVIEW_HOLD"
+        : inspection.communication.templateIntent);
+    const operator = await this.store.getOperatorProfile(sessionId);
+    const activity = IntakeActivityRecordSchema.parse({
+      activityId: `act-${draft.draftId}`,
+      sessionId,
+      returnRecordId: returnRecord.returnRecordId,
+      rmaId: returnRecord.rmaId,
+      orderId: returnRecord.orderId,
+      customerName: returnRecord.customer.name,
+      productTitle: returnRecord.product.title,
+      classification: inspection.classification,
+      nextAction: inspection.nextAction,
+      resolutionStatus: deriveIntakeResolutionStatus(actionOptionId),
+      channel: draft.channel,
+      templateIntent,
+      ...(operator ? { handledBy: operator.displayName } : {}),
+      inspectionId: inspection.inspectionId,
+      messageId: message.messageId,
+      recordedAt: this.now().toISOString(),
+    });
+    await this.store.putActivity(sessionId, activity);
+    return activity;
+  }
+
+  async listIntakeActivity(sessionId: string): Promise<{ activity: IntakeActivityRecord[] }> {
+    return { activity: await this.store.listActivity(sessionId) };
+  }
+
+  async listRefundPortfolio(sessionId: string, rawQuery: unknown = {}): Promise<RefundPortfolio> {
+    const query = RefundPortfolioQuerySchema.parse(rawQuery ?? {});
+    return buildRefundPortfolio({
+      activity: await this.store.listActivity(sessionId),
+      from: query.from,
+      to: query.to,
+    });
+  }
+
+  async getOperatorSettings(sessionId: string): Promise<{ settings: OperatorSettings }> {
+    return { settings: (await this.store.getOperatorSettings(sessionId)) ?? defaultOperatorSettings() };
+  }
+
+  async updateOperatorSettings(sessionId: string, rawInput: unknown): Promise<{ settings: OperatorSettings }> {
+    const patch = OperatorSettingsUpdateSchema.parse(rawInput);
+    const current = (await this.store.getOperatorSettings(sessionId)) ?? defaultOperatorSettings();
+    const settings = OperatorSettingsSchema.parse({
+      ...current,
+      ...patch,
+      dispositionOverrides: { ...current.dispositionOverrides, ...(patch.dispositionOverrides ?? {}) },
+      updatedAt: this.now().toISOString(),
+    });
+    await this.store.putOperatorSettings(sessionId, settings);
+    return { settings };
+  }
+
+  /**
+   * Persists the operator-confirmed post-photo triage decision. A SET_ASIDE
+   * disposition also lands in the activity feed since it resolves the intake
+   * without a queued message; PASS and TAKE_MORE_PHOTOS remain audit records
+   * because the intake continues.
+   */
+  async recordIntakeDisposition(
+    sessionId: string,
+    rawInput: unknown,
+  ): Promise<{ record: IntakeDispositionRecord; activity?: IntakeActivityRecord }> {
+    const input = RecordDispositionInputSchema.parse(rawInput);
+    const inspection = await this.store.getInspection(sessionId, input.inspectionId);
+    if (!inspection) throw new Error("INSPECTION_NOT_FOUND");
+    const returnRecord = await this.store.getReturnRecord(inspection.returnRecordId);
+    if (!returnRecord) throw new Error("RETURN_RECORD_NOT_FOUND");
+    const recommended = inspection.dispositionRecommendation ?? deriveDispositionRecommendation({
+      classification: inspection.classification,
+      confidence: inspection.confidence,
+      missingEvidence: inspection.missingEvidence,
+      settings: (await this.store.getOperatorSettings(sessionId)) ?? defaultOperatorSettings(),
+    });
+    const record = IntakeDispositionRecordSchema.parse({
+      dispositionId: randomUUID(),
+      sessionId,
+      inspectionId: inspection.inspectionId,
+      returnRecordId: inspection.returnRecordId,
+      disposition: input.disposition,
+      recommendedDisposition: recommended.disposition,
+      followedRecommendation: input.disposition === recommended.disposition,
+      reason: input.reason ?? recommended.reason,
+      recordedBy: input.recordedBy,
+      recordedAt: this.now().toISOString(),
+    });
+    await this.store.putDisposition(sessionId, record);
+    if (input.disposition !== "SET_ASIDE") return { record };
+    const activity = IntakeActivityRecordSchema.parse({
+      activityId: `act-disposition-${record.dispositionId}`,
+      kind: "DISPOSITION_RECORDED",
+      sessionId,
+      returnRecordId: returnRecord.returnRecordId,
+      rmaId: returnRecord.rmaId,
+      orderId: returnRecord.orderId,
+      customerName: returnRecord.customer.name,
+      productTitle: returnRecord.product.title,
+      classification: inspection.classification,
+      nextAction: inspection.nextAction,
+      resolutionStatus: "SET_ASIDE",
+      channel: "NONE",
+      disposition: "SET_ASIDE",
+      note: record.reason,
+      handledBy: record.recordedBy,
+      inspectionId: inspection.inspectionId,
+      recordedAt: record.recordedAt,
+    });
+    await this.store.putActivity(sessionId, activity);
+    return { record, activity };
+  }
+
+  /**
+   * Persists the outcome of a completed test-mode customer call and its
+   * activity entry. Stores a transcript digest plus a bounded preview only.
+   */
+  async recordCallOutcome(
+    sessionId: string,
+    rawInput: unknown,
+  ): Promise<{ call: IntakeCallRecord; activity: IntakeActivityRecord }> {
+    const input = RecordCallOutcomeInputSchema.parse(rawInput);
+    const returnRecord = await this.store.getReturnRecord(input.returnRecordId);
+    if (!returnRecord) throw new Error("RETURN_RECORD_NOT_FOUND");
+    const inspection = await this.store.getInspection(sessionId, input.inspectionId);
+    if (!inspection) throw new Error("INSPECTION_NOT_FOUND");
+    if (inspection.returnRecordId !== returnRecord.returnRecordId) throw new Error("CALL_CONTEXT_MISMATCH");
+    const endedAt = new Date(new Date(input.startedAt).getTime() + input.durationSeconds * 1_000).toISOString();
+    const call = IntakeCallRecordSchema.parse({
+      callId: randomUUID(),
+      sessionId,
+      returnRecordId: returnRecord.returnRecordId,
+      inspectionId: inspection.inspectionId,
+      mode: input.mode,
+      testMode: true,
+      startedAt: input.startedAt,
+      endedAt,
+      durationSeconds: input.durationSeconds,
+      transcriptSha256: createHash("sha256").update(input.transcript, "utf8").digest("hex"),
+      transcriptPreview: input.transcript.slice(0, 2_000),
+      resolution: input.resolution,
+      resolutionNote: input.resolutionNote ?? null,
+      operatorLabel: input.operatorLabel,
+    });
+    await this.store.putCallRecord(sessionId, call);
+    const activity = IntakeActivityRecordSchema.parse({
+      activityId: `act-call-${call.callId}`,
+      kind: "CALL_COMPLETED",
+      sessionId,
+      returnRecordId: returnRecord.returnRecordId,
+      rmaId: returnRecord.rmaId,
+      orderId: returnRecord.orderId,
+      customerName: returnRecord.customer.name,
+      productTitle: returnRecord.product.title,
+      classification: inspection.classification,
+      nextAction: inspection.nextAction,
+      resolutionStatus: deriveCallResolutionStatus(input.resolution),
+      channel: "VOICE",
+      note: input.resolutionNote ?? `Call outcome: ${input.resolution.replaceAll("_", " ").toLowerCase()}`,
+      handledBy: input.operatorLabel,
+      inspectionId: inspection.inspectionId,
+      recordedAt: endedAt,
+    });
+    await this.store.putActivity(sessionId, activity);
+    return { call, activity };
+  }
+
+  /**
+   * Prepares a test-mode customer resolution call. With an OpenAI key this
+   * mints a short-lived Realtime client secret so the browser can open its
+   * own WebSocket to the Realtime API; without one it returns the
+   * deterministic scripted call. Real telephony is never used.
+   */
+  async createRealtimeCallSession(sessionId: string, rawInput: unknown): Promise<RealtimeCallSessionResult> {
+    const input = RealtimeCallSessionInputSchema.parse(rawInput);
+    const returnRecord = await this.store.getReturnRecord(input.returnRecordId);
+    if (!returnRecord) throw new Error("RETURN_RECORD_NOT_FOUND");
+    const inspection = input.inspectionId
+      ? await this.store.getInspection(sessionId, input.inspectionId)
+      : undefined;
+    if (input.inspectionId && !inspection) throw new Error("INSPECTION_NOT_FOUND");
+    const settings = (await this.store.getOperatorSettings(sessionId)) ?? defaultOperatorSettings();
+    if (!settings.voiceCallsEnabled) throw new Error("VOICE_CALLS_DISABLED");
+    const instructions = buildRealtimeCallInstructions(returnRecord, inspection, settings);
+    const simulated = (reason: string): RealtimeCallSessionResult => ({
+      mode: "SIMULATED",
+      testMode: true,
+      reason,
+      script: simulatedCallScript({
+        classification: inspection?.classification ?? "INCONCLUSIVE",
+        customerName: returnRecord.customer.name,
+        productTitle: returnRecord.product.title,
+        rmaId: returnRecord.rmaId,
+        recommendedAmountCents: inspection?.refund.recommendedAmountCents ?? null,
+      }),
+      voice: settings.voice,
+      instructions,
+    });
+    const apiKey = await this.resolveApiKey();
+    if (!apiKey) return simulated("No OpenAI API key is configured; using the deterministic scripted call.");
+    await this.acquireModelSlot(sessionId);
+    try {
+      const minted = await mintRealtimeClientSecret({
+        apiKey,
+        sessionId,
+        instructions,
+        voice: settings.voice,
+        fetchImpl: this.fetchImpl,
+      });
+      return {
+        mode: "OPENAI_REALTIME",
+        testMode: true,
+        clientSecret: minted.clientSecret,
+        expiresAt: minted.expiresAt,
+        model: minted.model,
+        voice: settings.voice,
+        instructions,
+      };
+    } catch {
+      return simulated("The Realtime session could not be created; using the deterministic scripted call.");
+    }
+  }
 }
+
+/** Legacy drafts predate operator-chosen action options; map the inspection's
+ * own recommendation to the equivalent option for status derivation. */
+const fallbackActionOptionId = (nextAction: InspectionNextAction): IntakeActionOptionId => {
+  switch (nextAction) {
+    case "APPROVE_FULL":
+      return "APPROVE_FULL_REFUND";
+    case "APPROVE_PARTIAL":
+      return "APPROVE_PARTIAL_REFUND";
+    case "HOLD_FOR_REVIEW":
+      return "HOLD_FOR_SUPERVISOR_REVIEW";
+    case "REQUEST_MORE_EVIDENCE":
+      return "EMAIL_EVIDENCE_REQUEST";
+    case "ROUTE_AUTHENTICATION":
+      return "ROUTE_TO_AUTHENTICATION";
+    default: {
+      const exhausted: never = nextAction;
+      throw new Error(`Unhandled inspection next action: ${String(exhausted)}`);
+    }
+  }
+};
 
 export const returnIntakeMcpTools = [
   {
@@ -605,7 +969,7 @@ export const returnIntakeMcpTools = [
   },
   {
     name: "draft_return_communication",
-    description: "Draft neutral shopper email or SMS copy with a catalog-reference and warehouse-evidence manifest. Does not send it.",
+    description: "Draft neutral shopper email or SMS copy with a catalog-reference and warehouse-evidence manifest. Does not send it. Optionally targets one of the server-derived action options from the inspection (e.g. return-label offer, ship-item-back request).",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -613,6 +977,10 @@ export const returnIntakeMcpTools = [
       properties: {
         inspectionId: { type: "string" },
         channel: { type: "string", enum: ["EMAIL", "SMS"] },
+        actionOptionId: {
+          type: "string",
+          description: "One of the inspection's server-derived actionOptions ids; sets the drafted message's template intent.",
+        },
       },
     },
   },
@@ -644,7 +1012,7 @@ export const returnIntakeMcpTools = [
   },
   {
     name: "queue_test_communication",
-    description: "Queue a human-reviewed draft in the delivery-disabled synthetic outbox. The review must be session-scoped and bound to this exact draft and inspection. This tool never sends email or SMS.",
+    description: "Queue a human-reviewed draft in the delivery-disabled synthetic outbox and record the session intake activity/resolution status. The review must be session-scoped and bound to this exact draft and inspection. This tool never sends email or SMS.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
@@ -652,6 +1020,62 @@ export const returnIntakeMcpTools = [
       properties: {
         draftId: { type: "string" },
         reviewId: { type: "string" },
+      },
+    },
+  },
+  {
+    name: "list_intake_activity",
+    description: "List this session's completed intake activity records (newest first): matched return, classification, chosen action, resolution status, and queued message reference. Starts empty for a fresh session.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {},
+    },
+  },
+  {
+    name: "list_refund_portfolio",
+    description: "List the seeded warehouse refund book for the station dashboard and board, overlaid with this session's live intake activity. Optional from/to calendar days (UTC, inclusive) filter last activity.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        from: { type: "string", description: "Inclusive start calendar day YYYY-MM-DD (UTC)." },
+        to: { type: "string", description: "Inclusive end calendar day YYYY-MM-DD (UTC)." },
+      },
+    },
+  },
+  {
+    name: "record_intake_disposition",
+    description: "Persist the operator-confirmed post-photo triage decision (pass, take more photos, or set aside) against a session inspection. SET_ASIDE also records a resolution activity entry.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["inspectionId", "disposition", "recordedBy"],
+      properties: {
+        inspectionId: { type: "string" },
+        disposition: { type: "string", enum: ["PASS", "TAKE_MORE_PHOTOS", "SET_ASIDE"] },
+        reason: { type: "string" },
+        recordedBy: { type: "string", description: "Unauthenticated display label only." },
+      },
+    },
+  },
+  {
+    name: "record_call_outcome",
+    description: "Persist the outcome of a completed test-mode customer resolution call (OpenAI Realtime or simulated): transcript digest, duration, chosen resolution, and the resulting activity/status entry. No real telephone call is placed by this system.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["returnRecordId", "inspectionId", "mode", "startedAt", "durationSeconds", "transcript", "resolution", "operatorLabel"],
+      properties: {
+        returnRecordId: { type: "string" },
+        inspectionId: { type: "string" },
+        mode: { type: "string", enum: ["OPENAI_REALTIME", "SIMULATED"] },
+        startedAt: { type: "string" },
+        durationSeconds: { type: "number" },
+        transcript: { type: "string" },
+        resolution: { type: "string", enum: ["RESOLVED_REFUND_CONFIRMED", "CUSTOMER_WILL_SHIP_ITEM_BACK", "FOLLOW_UP_EMAIL_NEEDED", "NO_RESOLUTION_ESCALATE"] },
+        resolutionNote: { type: "string" },
+        operatorLabel: { type: "string", description: "Unauthenticated display label only." },
       },
     },
   },
@@ -676,5 +1100,17 @@ export const callReturnIntakeMcpTool = async (
       return service.recordReturnReview(sessionId, args);
     case "queue_test_communication":
       return service.queueTestCommunication(sessionId, args);
+    case "list_intake_activity":
+      return service.listIntakeActivity(sessionId);
+    case "list_refund_portfolio":
+      return service.listRefundPortfolio(sessionId, args);
+    case "record_intake_disposition":
+      return service.recordIntakeDisposition(sessionId, args);
+    case "record_call_outcome":
+      return service.recordCallOutcome(sessionId, args);
+    default: {
+      const exhausted: never = name;
+      throw new Error(`Unhandled intake MCP tool: ${String(exhausted)}`);
+    }
   }
 };

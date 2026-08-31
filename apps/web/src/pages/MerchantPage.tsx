@@ -30,7 +30,7 @@ import { evaluateCheckpoint } from '../lib/api'
 import { useDemo } from '../lib/demo-context'
 
 const cases = [
-  { id: 'RMA-8821', order: 'JC-1042', shopper: 'Alex Morgan', amount: '$1,849', type: 'Empty return', updated: '4m', image: '/evidence/return-empty-box.png' },
+  { id: 'RMA-8821', order: 'SK-1042', shopper: 'Alex Morgan', amount: '$116', type: 'Empty return', updated: '4m', image: '/evidence/return-empty-box.png' },
 ]
 
 type Decision = 'approve' | 'partial' | 'request' | 'deny' | null
@@ -90,7 +90,7 @@ export function MerchantPage() {
 
   return (
     <div className="page merchant-page">
-      <PageIntro eyebrow="MERCHANT CONSOLE · JUNIPER CIRCUIT" title={<>Make the decision. <em>See the proof.</em></>} description="A case workspace that keeps model recommendation, merchant policy, and accountable human action distinct — with shopper cure and payment evidence visible from the start." actions={<Link className="button button--secondary" to="/lifecycle?checkpoint=ITEM_INSPECTION"><FileText size={16} aria-hidden="true" /> View decision contract</Link>} />
+      <PageIntro eyebrow="MERCHANT CONSOLE · SKIMS" title={<>Make the decision. <em>See the proof.</em></>} description="A case workspace that keeps model recommendation, merchant policy, and accountable human action distinct — with shopper cure and payment evidence visible from the start." actions={<Link className="button button--secondary" to="/legacy/lifecycle?checkpoint=ITEM_INSPECTION"><FileText size={16} aria-hidden="true" /> View decision contract</Link>} />
       <div className="merchant-kpis">
         {outcomeMetrics.map((metric) => <MetricCard key={metric.label} {...metric} />)}
       </div>
@@ -118,7 +118,7 @@ export function MerchantPage() {
               </EmptyNotice>
             )}
           </div>
-          <p className="queue-scope-note"><ShieldCheck size={15} aria-hidden="true" /><span>This review surface intentionally follows one coherent case from capture through appeal. <Link to="/intake">Explore other package fixtures in Scan Return.</Link></span></p>
+          <p className="queue-scope-note"><ShieldCheck size={15} aria-hidden="true" /><span>This review surface intentionally follows one coherent case from capture through appeal. <Link to="/legacy/intake">Explore other package fixtures in Scan Return.</Link></span></p>
         </aside>
 
         <section className={`case-detail${visibleCases.length ? '' : ' case-detail--empty'}`}>
@@ -133,7 +133,7 @@ export function MerchantPage() {
           ) : (
             <>
           <header className="case-detail__header">
-            <div><div className="decision-card__badges"><Badge tone={operatorFindingReady ? 'orange' : 'blue'}>{displayType.toUpperCase()}</Badge><Badge tone="violet">SYNTHETIC FIXTURE</Badge><Badge tone="neutral">{state.physical === 'inspection-hold' ? 'REFUND HELD' : formatStatus(state.physical).toUpperCase()}</Badge></div><h2>{selected.id} <span>· Order {selected.order}</span></h2><p>{selected.shopper} · Juniper Arc One 2-camera field kit</p></div>
+            <div><div className="decision-card__badges"><Badge tone={operatorFindingReady ? 'orange' : 'blue'}>{displayType.toUpperCase()}</Badge><Badge tone="violet">SYNTHETIC FIXTURE</Badge><Badge tone="neutral">{state.physical === 'inspection-hold' ? 'REFUND HELD' : formatStatus(state.physical).toUpperCase()}</Badge></div><h2>{selected.id} <span>· Order {selected.order}</span></h2><p>{selected.shopper} · Fits Everybody Cami Bodysuit · Onyx · M and L</p></div>
             <div className="case-detail__amount"><small>Refund requested</small><strong>{selected.amount}.00</strong></div>
           </header>
 
@@ -143,7 +143,7 @@ export function MerchantPage() {
               <Badge tone="blue">SEQUENCE GATE</Badge>
               <h3 id="operator-review-required">Operator review required</h3>
               <p>The completed capture record is available, but no neutral warehouse observation has been confirmed or routed. A finding, model assessment, and merchant decision will remain hidden until that step is complete.</p>
-              <Link className="button button--primary" to="/operator">Open warehouse capture review <ArrowRight size={16} aria-hidden="true" /></Link>
+              <Link className="button button--primary" to="/legacy/operator">Open warehouse capture review <ArrowRight size={16} aria-hidden="true" /></Link>
             </section>
           ) : (
             <>
@@ -151,7 +151,7 @@ export function MerchantPage() {
             <figure className="case-photo"><img src={selected.image} alt={`Synthetic evidence fixture for ${selected.type.toLowerCase()}`} /><figcaption><Badge tone="violet">SYNTHETIC EVIDENCE · NOT A CUSTOMER PHOTO</Badge><span>Inbound camera 02 · Aug 24, 2:14:08 PM</span></figcaption></figure>
             <div className="finding-summary">
               <span className="eyebrow">CORROBORATED FINDING</span>
-              <div className="finding-summary__title"><ShieldAlert aria-hidden="true" /><div><strong>{selected.type === 'Empty return' ? 'Expected items not observed' : selected.type}</strong><span>{selected.type === 'Empty return' ? 'Quantity 0 of 2 cameras · serials absent' : 'Requires operator confirmation'}</span></div></div>
+              <div className="finding-summary__title"><ShieldAlert aria-hidden="true" /><div><strong>{selected.type === 'Empty return' ? 'Expected items not observed' : selected.type}</strong><span>{selected.type === 'Empty return' ? 'Quantity 0 of 2 pieces · no polybags in the mailer' : 'Requires operator confirmation'}</span></div></div>
               <dl>
                 <div><dt>Outbound weight</dt><dd>1.80 kg</dd></div>
                 <div><dt>Inbound weight</dt><dd className="text-danger">0.18 kg <ArrowDownRight size={14} /></dd></div>

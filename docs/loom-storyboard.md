@@ -19,7 +19,7 @@ Target length: 7:45–8:30. Record only after the live URL passes the demo runbo
 
 > This is Redo Return Integrity, an evidence-led decision layer from checkout through appeal. I built it around one rule: uncertainty should create a solvable step, not an automatic accusation. The first deep fraud family is empty, decoy or wrong-item, possible imitation, and quantity mismatch. I’ll show the shopper, merchant, and warehouse experiences, then how I would prove value without counting abandoned challenges as fraud.
 
-Point briefly to the three trust statements and the fictional Juniper Circuit disclosure.
+Point briefly to the three trust statements and the fictional SKIMS disclosure.
 
 ## 0:35–1:15 — product layers and fit
 

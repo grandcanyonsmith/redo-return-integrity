@@ -46,7 +46,7 @@ Put the Loom storyboard, demo runbook, deployment guide, and link checklist in t
 
 ## Mandatory “Read this first” callout
 
-> This is an independent candidate proposal, not an official Redo roadmap. All Juniper Circuit data and partner integrations are synthetic except the live AWS/OpenAI paths explicitly labeled in the prototype. The `$80M` managed-warehouse and `$200M` broader-surface values are supplied planning scenarios whose accounting definitions require Redo validation; they are not additive and are not treated as Redo revenue. OpenAI recommends bounded next steps but never makes a final adverse decision. Challenge noncompletion is not fraud. Evidence-ready is not submitted to a processor.
+> This is an independent candidate proposal, not an official Redo roadmap. All SKIMS data and partner integrations are synthetic except the live AWS/OpenAI paths explicitly labeled in the prototype. The `$80M` managed-warehouse and `$200M` broader-surface values are supplied planning scenarios whose accounting definitions require Redo validation; they are not additive and are not treated as Redo revenue. OpenAI recommends bounded next steps but never makes a final adverse decision. Challenge noncompletion is not fraud. Evidence-ready is not submitted to a processor.
 
 ## Publication settings
 

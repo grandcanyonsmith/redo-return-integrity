@@ -142,7 +142,7 @@ describe("OpenAI return-intake adapters", () => {
       labelId: "LBL-RMA-8821",
       trackingNumber: "1Z999AA10123456784",
       rmaId: "RMA-8821",
-      orderId: "JC-1042",
+      orderId: "SK-1042",
       carrier: "UPS",
       confidence: 0.99,
       evidenceIds: ["ev-label-1"],
@@ -187,7 +187,7 @@ describe("OpenAI return-intake adapters", () => {
       finding: { classification: "INCONCLUSIVE", confidence: 0 },
     });
     const body = JSON.parse(String((mockFetch as any).mock.calls[0][1].body));
-    expect(String(body.input[0].content[0].text)).toContain("observedItems array is only for visible returned product units");
+    expect(String(body.input[0].content[0].text)).toContain("observedItems array is only for visible returned garments");
     expect(String(body.input[0].content[0].text)).toContain("EMPTY_BOX requires observedItems=[]");
   });
 

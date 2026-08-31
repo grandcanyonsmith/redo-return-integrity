@@ -6,9 +6,19 @@ import App from './App'
 import { newDemoState, type DemoState } from './domain'
 import { DemoProvider } from './lib/demo-context'
 
-function renderAt(path: string, statePatch: Partial<DemoState> = {}) {
+function renderAt(path: string, statePatch: Partial<DemoState> = {}, options: { operator?: boolean } = {}) {
   sessionStorage.clear()
   sessionStorage.setItem('redo-return-integrity:demo:v1', JSON.stringify({ ...newDemoState(), ...statePatch }))
+  if (options.operator) {
+    sessionStorage.setItem('redo-return-integrity:operator:v1', JSON.stringify({
+      operatorId: 'op-stn-04',
+      stationId: 'STN-04',
+      displayName: 'Station 04 operator',
+      role: 'OPERATOR',
+      identityAssurance: 'DEMO_STATION_PIN',
+      loggedInAt: '2026-08-29T12:00:00.000Z',
+    }))
+  }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   return render(
     <QueryClientProvider client={client}>
@@ -100,7 +110,7 @@ describe('interview demo', () => {
     expect(await screen.findByText(/return record matched/i)).toBeInTheDocument()
     expect(document.querySelectorAll('input[type="file"][capture="environment"]')).toHaveLength(2)
     const policySnapshot = screen.getByRole('region', { name: /merchant policy snapshot/i })
-    expect(policySnapshot).toHaveTextContent('juniper-return-policy')
+    expect(policySnapshot).toHaveTextContent('skims-returns')
     expect(policySnapshot).toHaveTextContent('seeded-policy-1')
     expect(policySnapshot).toHaveTextContent('USD')
     expect(policySnapshot).toHaveTextContent('92fe5169bc20d5bd60814c9cddd6384586c85ba7b8f119e6cc787c8d449e4da6')
@@ -131,12 +141,61 @@ describe('interview demo', () => {
     expect(screen.getByRole('button', { name: /queue test shopper message/i })).toBeDisabled()
   })
 
-  it('opens on an operations dashboard with a live work queue', async () => {
+  it('gates the workstation behind the demo operator login', () => {
     renderAt('/')
+    expect(screen.getByRole('heading', { name: /station sign in/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/station id/i)).toBeInTheDocument()
+    expect(screen.getByLabelText(/^pin$/i)).toBeInTheDocument()
+    expect(screen.getByText(/no real credentials or identity verification/i)).toBeInTheDocument()
+  })
+
+  it('opens the refund dashboard once an operator is signed in', async () => {
+    renderAt('/', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /refund dashboard/i })).toBeInTheDocument()
+    expect(screen.getByRole('navigation', { name: /workstation/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /^home$/i })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByLabelText(/refund statistics/i)).toBeInTheDocument()
+    expect(screen.getByRole('grid', { name: /august/i })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /station settings/i }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: /log out/i }).length).toBeGreaterThan(0)
+    expect(await screen.findByText(/total refunds/i)).toBeInTheDocument()
+    const stats = screen.getByLabelText(/refund statistics/i)
+    expect(stats).toHaveTextContent(/time saved with ai/i)
+    expect(stats).toHaveTextContent(/wrongful refunds saved/i)
+    expect(screen.getByRole('link', { name: /fraudulent attempts/i })).toBeInTheDocument()
+  })
+
+  it('opens the fraudulent attempts breakdown from the dashboard', async () => {
+    renderAt('/', {}, { operator: true })
+    await userEvent.click(await screen.findByRole('link', { name: /fraudulent attempts/i }))
+    expect(await screen.findByRole('heading', { name: /fraudulent attempts/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /empty mailers/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /decoy returns/i })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: /short-shipped returns/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/fraudulent attempt totals/i)).toHaveTextContent(/product held back/i)
+    expect(screen.getAllByText(/\$464\.00/).length).toBeGreaterThan(0)
+  })
+
+  it('opens a case journey from the board with checkout through calls', async () => {
+    renderAt('/board', {}, { operator: true })
+    expect(screen.getByRole('heading', { name: /return board/i })).toBeInTheDocument()
+    expect(screen.getByRole('listitem', { name: /refunded/i })).toBeInTheDocument()
+    expect(screen.getByRole('listitem', { name: /fraudulent/i })).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: /noah chen/i }))
+    expect(await screen.findByRole('dialog', { name: /noah chen/i })).toBeInTheDocument()
+    expect(screen.getByText(/checkout sk-1099/i)).toBeInTheDocument()
+    expect(screen.getByText(/pick · pack · label/i)).toBeInTheDocument()
+    expect(screen.getByText(/inbound weight/i)).toBeInTheDocument()
+    expect(screen.getByText(/matching contents/i)).toBeInTheDocument()
+    expect(screen.getByText(/ai email queued/i)).toBeInTheDocument()
+  })
+
+  it('keeps the operations dashboard with a live work queue at /legacy', async () => {
+    renderAt('/legacy')
     expect(screen.getByRole('heading', { name: /work the queue/i })).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: /needs attention/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /checkout challenge/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /impossible logistics/i })).toHaveAttribute('href', '/shopper?journey=return')
+    expect(screen.getByRole('link', { name: /impossible logistics/i })).toHaveAttribute('href', '/legacy/shopper?journey=return')
     expect(screen.getByRole('link', { name: /^dashboard$/i })).toHaveClass('topnav__link--active')
 
     await userEvent.type(screen.getByLabelText(/filter work queue/i), 'zzzz-no-match')
@@ -167,8 +226,8 @@ describe('interview demo', () => {
   })
 
   it('keeps evidence-ready appeals in the work queue and does not call the walkthrough complete', () => {
-    renderAt('/', { checkout: 'cleared', reverseLogistics: 'cleared', physical: 'evidence-ready' })
-    expect(screen.getByRole('link', { name: /contest window open/i })).toHaveAttribute('href', '/shopper?journey=appeal')
+    renderAt('/legacy', { checkout: 'cleared', reverseLogistics: 'cleared', physical: 'evidence-ready' })
+    expect(screen.getByRole('link', { name: /contest window open/i })).toHaveAttribute('href', '/legacy/shopper?journey=appeal')
     expect(screen.getByText(/2 of 3/i)).toBeInTheDocument()
     expect(screen.queryByText(/every demo journey is resolved/i)).not.toBeInTheDocument()
   })
@@ -246,11 +305,11 @@ describe('interview demo', () => {
     await userEvent.click(screen.getByRole('button', { name: /quantity mismatch/i }))
     await userEvent.click(screen.getByRole('button', { name: /analyze contents/i }))
     expect(screen.getByText('QUANTITY_MISMATCH')).toBeInTheDocument()
-    expect(screen.getByText('$924.50 refund')).toBeInTheDocument()
+    expect(screen.getByText('$58.00 refund')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: /shopper/i }))
     expect(screen.getByRole('heading', { name: /one quick check before we ship/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^open checkout journey$/i })).toHaveAttribute('href', '/shopper?journey=checkout')
+    expect(screen.getByRole('link', { name: /^open checkout journey$/i })).toHaveAttribute('href', '/legacy/shopper?journey=checkout')
   })
 
   it('restores a deep-linked merchant communication demo and supports keyboard tab movement', async () => {
@@ -259,7 +318,7 @@ describe('interview demo', () => {
     const merchantTab = await screen.findByRole('tab', { name: /merchant/i })
     expect(merchantTab).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('heading', { name: /review the customer-message contract/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /^open communication review$/i })).toHaveAttribute('href', '/intake')
+    expect(screen.getByRole('link', { name: /^open communication review$/i })).toHaveAttribute('href', '/legacy/intake')
 
     merchantTab.focus()
     await userEvent.keyboard('{ArrowRight}')

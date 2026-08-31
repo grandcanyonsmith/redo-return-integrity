@@ -76,8 +76,8 @@ export function DashboardPage() {
       ? '/shopper?journey=appeal'
       : '/merchant'
   const guidedSteps = [
-    { label: 'Verify checkout', detail: 'Clear a high-value order without assigning a fraud label.', href: '/shopper?journey=checkout', done: checkoutDone, current: !checkoutDone, icon: CreditCard },
-    { label: 'Resolve handoff', detail: 'Use a staffed receipt to explain impossible carrier timing.', href: '/shopper?journey=return', done: handoffDone, current: checkoutDone && !handoffDone, icon: Route },
+    { label: 'Verify checkout', detail: 'Clear a high-value order without assigning a fraud label.', href: '/legacy/shopper?journey=checkout', done: checkoutDone, current: !checkoutDone, icon: CreditCard },
+    { label: 'Resolve handoff', detail: 'Use a staffed receipt to explain impossible carrier timing.', href: '/legacy/shopper?journey=return', done: handoffDone, current: checkoutDone && !handoffDone, icon: Route },
     { label: 'Review the return', detail: 'Capture evidence, route a finding, and preserve appeal.', href: physicalHref, done: physicalDone, current: checkoutDone && handoffDone && !physicalDone, icon: PackageSearch },
   ]
   const apiStatus = health.isPending
@@ -94,7 +94,7 @@ export function DashboardPage() {
         compact
         eyebrow="OPERATIONS DASHBOARD"
         title={<>Work the queue. <em>See the proof.</em></>}
-        description="Live demo state for Juniper Circuit: open shopper tasks, warehouse inspection, and merchant review — with model output kept separate from accountable decisions."
+        description="Live demo state for SKIMS: open shopper tasks, warehouse inspection, and merchant review — with model output kept separate from accountable decisions."
         actions={<span className="health-status" role="status" aria-live="polite"><Badge tone={apiStatus.tone} icon={apiStatus.icon}>{apiStatus.label}</Badge>{health.isError ? <button type="button" onClick={() => health.refetch()}>Retry</button> : null}</span>}
       />
 
@@ -111,9 +111,9 @@ export function DashboardPage() {
             {nextItem
               ? <Link className="button button--primary" to={nextItem.href}>Continue as {nextItem.owner} <ArrowRight size={16} aria-hidden="true" /></Link>
               : walkthroughComplete
-                ? <Link className="button button--primary" to="/reset"><RotateCcw size={16} aria-hidden="true" /> Reset walkthrough</Link>
+                ? <Link className="button button--primary" to="/legacy/reset"><RotateCcw size={16} aria-hidden="true" /> Reset walkthrough</Link>
                 : <Link className="button button--primary" to={physicalHref}>Continue unresolved journey <ArrowRight size={16} aria-hidden="true" /></Link>}
-            <Link className="button button--secondary" to="/lifecycle">Explore the decision lifecycle</Link>
+            <Link className="button button--secondary" to="/legacy/lifecycle">Explore the decision lifecycle</Link>
           </div>
         </div>
         <ol className="guided-journey" aria-label="Guided demo journey">
@@ -173,7 +173,7 @@ export function DashboardPage() {
             <EmptyNotice
               icon={Inbox}
               title={items.length ? 'No matching work' : 'Queue is clear'}
-              actions={query || ownerFilter !== 'All' ? <button type="button" className="button button--secondary button--small" onClick={() => { setQuery(''); setOwnerFilter('All') }}>Clear filters</button> : <Link className="button button--secondary button--small" to="/reset">Reset demo session</Link>}
+              actions={query || ownerFilter !== 'All' ? <button type="button" className="button button--secondary button--small" onClick={() => { setQuery(''); setOwnerFilter('All') }}>Clear filters</button> : <Link className="button button--secondary button--small" to="/legacy/reset">Reset demo session</Link>}
             >
               {items.length
                 ? 'Nothing in this session matches that filter. Clear it to see open shopper, operator, and merchant tasks.'

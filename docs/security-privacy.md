@@ -15,7 +15,7 @@ This document describes prototype controls and production gates; it is not a com
 
 ## Public-demo privacy boundary
 
-- Juniper Circuit, its shoppers, orders, tracking events, payment results, warehouse images, and disputes are fictional/synthetic.
+- SKIMS, its shoppers, orders, tracking events, payment results, warehouse images, and disputes are fictional/synthetic.
 - Users are told not to upload a government ID, face, real shipping label, or another person's personal data.
 - The browser camera path re-encodes a bounded image, which strips ordinary EXIF metadata when canvas encoding succeeds, then computes SHA-256 and uses the completed intake-upload protocol before an MCP tool can consume the evidence ID. Nonfixture REST/MCP contracts expose no inline image source. Curated synthetic fixtures remain the preferred public path.
 - The separate intake upload API issues a 60-second presigned S3 POST for declared JPEG/PNG/WebP up to 5 MiB and explicitly marks the object “not evidence.” Its policy fixes the exact declared byte length, MIME type, SHA-256 checksum, purpose, and metadata. S3 receives a random purpose-scoped key and a domain-separated one-way session binding, never the raw bearer-like session ID.

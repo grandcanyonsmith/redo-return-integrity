@@ -87,8 +87,8 @@ export const checkpoints: Checkpoint[] = [
     'Outbound pack',
   ]),
   checkpoint(5, 'OUTBOUND_PACK', 'Fulfillment', 'Outbound pack', 'What ground truth leaves the facility?', 'Managed network', 'E4', [
-    'Order-linked scan, serialized SKU, quantity, calibrated weight, station/operator ID, timestamp, pack images.',
-    'Expected-versus-measured weight and quantity within tolerance; serials match order.',
+    'Order-linked scan, variant SKU, quantity, calibrated weight, station/operator ID, timestamp, pack images.',
+    'Expected-versus-measured weight and quantity within tolerance; variant SKUs match order.',
     'Vision describes visible contents and legibility; it does not override scale or scanner records.',
     'Capture protocol requires complete label, container, contents, and calibration record.',
     'Seal and release with evidence manifest.',
@@ -159,8 +159,8 @@ export const checkpoints: Checkpoint[] = [
     'Item inspection',
   ]),
   checkpoint(13, 'ITEM_INSPECTION', 'Resolution', 'Item inspection', 'What was actually returned?', 'Managed network', 'E4', [
-    'Six-view image set, unpacking sequence, contents, quantity, serial/barcode, product spec, weights, protocol record.',
-    'Quantity 0/2 cameras; neither expected product serial was found; packaging identifiers match the authorized kit.',
+    'Six-view image set, unpacking sequence, contents, quantity, hang tag and care label, product spec, weights, protocol record.',
+    'Quantity 0/2 garments; no polybags were found; packaging identifiers match the authorized return.',
     'Likely empty return (0.93) with cited frames; imitation cannot be assessed because no item is visible.',
     'Operator must confirm protocol completeness. A human decides approve, partial, request more, or deny.',
     'Escalate to merchant reviewer; model recommendation is not a denial.',

@@ -44,9 +44,7 @@ import {
   type PackageInspection,
   type QueueResult,
 } from '../lib/api'
-
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024
-const acceptedImageTypes = new Set(['image/jpeg', 'image/png', 'image/webp'])
+import { prepareImage } from '../lib/prepare-image'
 
 type IntakeImage = {
   previewUrl: string
@@ -82,12 +80,13 @@ const defaultPackageImage: IntakeImage = {
 }
 
 const packageFixtures: readonly PackageFixture[] = [
-  { id: 'matchReturn', label: 'Expected SKU and quantity', shortLabel: 'Match', imageUrl: '/evidence/return-matching-contents.png' },
-  { id: 'emptyReturn', label: 'Opened parcel with no product', shortLabel: 'Empty box', imageUrl: '/evidence/return-empty-box.png' },
-  { id: 'quantityMismatch', label: 'One of two units returned', shortLabel: 'Qty mismatch', imageUrl: '/evidence/return-quantity-mismatch.png' },
-  { id: 'wrongItem', label: 'Unrelated product in parcel', shortLabel: 'Wrong product', imageUrl: '/evidence/return-wrong-item.png' },
-  { id: 'damagedProduct', label: 'Expected product with damage', shortLabel: 'Damaged', imageUrl: '/evidence/return-damaged-product.png' },
+  { id: 'matchReturn', label: 'Expected style, color, and quantity', shortLabel: 'Match', imageUrl: '/evidence/return-matching-contents.png' },
+  { id: 'emptyReturn', label: 'Opened mailer with no garment', shortLabel: 'Empty mailer', imageUrl: '/evidence/return-empty-box.png' },
+  { id: 'quantityMismatch', label: 'One of two pieces returned', shortLabel: 'Qty mismatch', imageUrl: '/evidence/return-quantity-mismatch.png' },
+  { id: 'wrongItem', label: 'Unrelated garment in mailer', shortLabel: 'Wrong product', imageUrl: '/evidence/return-wrong-item.png' },
+  { id: 'damagedProduct', label: 'Expected piece with fabric damage', shortLabel: 'Damaged', imageUrl: '/evidence/return-damaged-product.png' },
   { id: 'possibleImitation', label: 'Lookalike needing authentication', shortLabel: 'Possible imitation', imageUrl: '/evidence/return-imitation.png' },
+  { id: 'wardrobing', label: 'Worn piece with tag reattached', shortLabel: 'Wardrobing', imageUrl: '/evidence/return-wardrobing.png' },
 ]
 
 const classificationFlags = [
@@ -96,6 +95,7 @@ const classificationFlags = [
   'QUANTITY_MISMATCH',
   'WRONG_PRODUCT',
   'POSSIBLE_IMITATION',
+  'WARDROBING',
   'INCONCLUSIVE',
 ] as const
 
@@ -112,37 +112,6 @@ const describeAuditMode = (mode: string) => mode === 'OPENAI'
   : mode === 'SYNTHETIC_FIXTURE'
     ? 'Synthetic fixture'
     : 'Deterministic safe fallback'
-
-const readAsDataUrl = (blob: Blob) => new Promise<string>((resolve, reject) => {
-  const reader = new FileReader()
-  reader.onerror = () => reject(new Error('The browser could not read this image.'))
-  reader.onload = () => typeof reader.result === 'string' ? resolve(reader.result) : reject(new Error('The selected file is not an image.'))
-  reader.readAsDataURL(blob)
-})
-
-const prepareImage = async (file: File): Promise<string> => {
-  if (!acceptedImageTypes.has(file.type)) throw new Error('Use a JPEG, PNG, or WebP image.')
-  if (file.size > MAX_IMAGE_BYTES) throw new Error('Image must be 5 MB or smaller.')
-  if (typeof createImageBitmap !== 'function') return readAsDataUrl(file)
-
-  let bitmap: ImageBitmap | undefined
-  try {
-    bitmap = await createImageBitmap(file)
-    const scale = Math.min(1, 2048 / Math.max(bitmap.width, bitmap.height))
-    const canvas = document.createElement('canvas')
-    canvas.width = Math.max(1, Math.round(bitmap.width * scale))
-    canvas.height = Math.max(1, Math.round(bitmap.height * scale))
-    const context = canvas.getContext('2d')
-    if (!context) return readAsDataUrl(file)
-    context.drawImage(bitmap, 0, 0, canvas.width, canvas.height)
-    const encoded = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', 0.9))
-    return encoded ? readAsDataUrl(encoded) : readAsDataUrl(file)
-  } catch {
-    return readAsDataUrl(file)
-  } finally {
-    bitmap?.close()
-  }
-}
 
 type ExecutionMode = LabelLookupResult['executionMode'] | 'live' | 'fallback' | 'unavailable'
 
@@ -597,7 +566,7 @@ export function IntakePage() {
   return (
     <div className="page intake-page">
       <PageIntro
-        eyebrow="MERCHANT + WAREHOUSE WORKFLOW · JUNIPER CIRCUIT"
+        eyebrow="MERCHANT + WAREHOUSE WORKFLOW · SKIMS"
         title={<>Scan the return. <em>Inspect what arrived.</em></>}
         description="A guided intake station turns a label, order record, catalog image, and package photo into structured findings. OpenAI tools describe and recommend; deterministic merchant policy and an accountable human control the outcome."
         actions={<Badge tone="orange" icon={Warehouse}>Station DEN-04 · Test mode</Badge>}
@@ -642,7 +611,7 @@ export function IntakePage() {
           <>
             <div className="fixture-selector" role="group" aria-label="Synthetic package examples"><span><FileImage aria-hidden="true" /> Load a synthetic test case</span><div>{packageFixtures.map((fixture) => <button key={fixture.id} aria-pressed={packageImage.fixtureId === fixture.id} className={packageImage.fixtureId === fixture.id ? 'active' : ''} onClick={() => selectPackageFixture(fixture)}><img src={fixture.imageUrl} alt="" /><span>{fixture.shortLabel}</span></button>)}</div></div>
             <div className="intake-step__grid">
-              <CaptureCard id="package-contents-photo" title="Opened-package contents" guidance="Include the full box, every item, packaging, labels, serial markings, and visible damage in the frame." image={packageImage} busy={preparing === 'package'} onFile={(file) => void selectLocalImage(file, 'package')} />
+              <CaptureCard id="package-contents-photo" title="Opened-package contents" guidance="Include the full mailer, every garment, polybags, hang tags, care labels, and visible damage in the frame." image={packageImage} busy={preparing === 'package'} onFile={(file) => void selectLocalImage(file, 'package')} />
               <div className="intake-tool-call intake-tool-call--vision">
                 <header><Bot aria-hidden="true" /><div><small>MCP TOOL 02</small><h3>analyze_return_contents</h3></div></header>
                 <p>A multimodal, strict-schema comparison produces observations and bounded flags. It cannot prove intent, identity, or counterfeit status.</p>

@@ -246,7 +246,10 @@ export class ReturnIntegrityStack extends Stack {
             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
             "font-src 'self' data: https://fonts.gstatic.com",
             "img-src 'self' data: blob: https://*.amazonaws.com https://*.cloudfront.net",
-            "connect-src 'self' https://*.amazonaws.com",
+            // api.openai.com (https + wss) carries the browser's test-mode
+            // Realtime voice call, authenticated with a short-lived client
+            // secret minted server-side. The real API key never reaches CSP scope.
+            "connect-src 'self' https://*.amazonaws.com https://api.openai.com wss://api.openai.com",
             "media-src 'self' blob:",
             "worker-src 'self' blob:",
             "upgrade-insecure-requests",
@@ -269,7 +272,9 @@ export class ReturnIntegrityStack extends Stack {
       },
       customHeadersBehavior: {
         customHeaders: [
-          { header: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(), payment=()', override: true },
+          // The workstation's test-mode voice call (OpenAI Realtime over
+          // WebSocket) captures mic audio on this origin only.
+          { header: 'Permissions-Policy', value: 'camera=(), microphone=(self), geolocation=(), payment=()', override: true },
           { header: 'Cross-Origin-Opener-Policy', value: 'same-origin', override: true },
         ],
       },

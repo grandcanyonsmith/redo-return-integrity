@@ -19,10 +19,10 @@ import {
   type RequiredAction,
 } from "./types.js";
 
-export const POLICY_VERSION = "juniper-circuit-2026-08-24.1";
+export const POLICY_VERSION = "skims-returns-2026-08-30.1";
 export const SCHEMA_VERSION = "checkpoint-decision-1.0";
 
-const policyId = "juniper-circuit-return-integrity";
+const policyId = "skims-return-integrity";
 
 const cure = (
   owner: RequiredAction["owner"],

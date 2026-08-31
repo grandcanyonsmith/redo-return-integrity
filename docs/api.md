@@ -302,29 +302,29 @@ The response never treats model text as an authorization decision. Abbreviated e
     "labelId": "LBL-8821",
     "trackingNumber": "1Z-REDO-8821",
     "rmaId": "RMA-8821",
-    "orderId": "JC-1042",
+    "orderId": "SK-1042",
     "carrier": "UPS",
     "confidence": 1,
     "evidenceIds": ["ev-label-…"]
   },
   "returnRecord": {
-    "returnRecordId": "ret-jc-1042",
-    "merchantId": "juniper-circuit-demo",
-    "merchantName": "Juniper Circuit",
+    "returnRecordId": "ret-sk-1042",
+    "merchantId": "skims",
+    "merchantName": "SKIMS",
     "labelId": "LBL-8821",
     "rmaId": "RMA-8821",
-    "orderId": "JC-1042",
+    "orderId": "SK-1042",
     "trackingNumber": "1Z-REDO-8821",
     "product": {
-      "sku": "JC-ARC-ONE-KIT",
+      "sku": "SK-FE-CAMI-BODYSUIT",
       "quantity": 2,
-      "unitPriceCents": 92450,
-      "totalEligibleRefundCents": 184900
+      "unitPriceCents": 5800,
+      "totalEligibleRefundCents": 11600
     },
     "return": {
-      "requestedRefundCents": 184900,
+      "requestedRefundCents": 11600,
       "currency": "USD",
-      "policyId": "juniper-return-policy",
+      "policyId": "skims-returns",
       "policyVersion": "2026-08-24.v1",
       "policySnapshotSha256": "92fe5169bc20d5bd60814c9cddd6384586c85ba7b8f119e6cc787c8d449e4da6",
       "status": "INSPECTION_PENDING"
@@ -345,7 +345,7 @@ Compares package-content evidence against the looked-up catalog SKU, authorized 
 
 ```json
 {
-  "returnRecordId": "ret-jc-1042",
+  "returnRecordId": "ret-sk-1042",
   "evidenceId": "ev-upload-…"
 }
 ```

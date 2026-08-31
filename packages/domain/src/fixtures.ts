@@ -1,6 +1,6 @@
 import { CaseSchema, type EvidenceArtifact, type ReturnIntegrityCase } from "./types.js";
 
-const merchant = { merchantId: "merchant-juniper-circuit", merchantName: "Juniper Circuit" } as const;
+const merchant = { merchantId: "merchant-skims", merchantName: "SKIMS" } as const;
 
 const artifact = (
   evidenceId: string,
@@ -24,7 +24,7 @@ const artifact = (
   objectKey: options.objectKey,
   fixtureUrl: options.fixtureUrl,
   checksum: options.checksum,
-  protocolVersion: "juniper-fixture-1.0",
+  protocolVersion: "skims-fixture-1.0",
   piiClass: options.piiClass ?? "PSEUDONYMOUS",
   useScope: options.useScope ?? ["RISK_DECISION", "MODEL_EVALUATION", "ANALYTICS"],
 });
@@ -78,7 +78,7 @@ const goodActorCheckout: ReturnIntegrityCase = CaseSchema.parse({
     }),
     artifact("ev-good-release", checkoutCaseId, "ORDER_RELEASE", "merchant-oms", "E2", "2026-08-24T14:10:00.000Z", {
       releaseStatus: "READY",
-      orderIdAlias: "JC-10482",
+      orderIdAlias: "SK-10482",
     }),
   ],
   decisions: [],
@@ -100,9 +100,9 @@ const impossibleLogistics: ReturnIntegrityCase = CaseSchema.parse({
   createdAt: "2026-08-24T15:00:00.000Z",
   evidence: [
     artifact("ev-log-order", logisticsCaseId, "ORDER_RELEASE", "merchant-oms", "E2", "2026-08-17T16:00:00.000Z", {
-      expectedSku: "JC-KEY-PRO-01",
+      expectedSku: "SK-SL-SLIP-DRESS",
       expectedQuantity: 1,
-      orderIdAlias: "JC-10319",
+      orderIdAlias: "SK-10319",
     }),
     artifact("ev-log-delivery", logisticsCaseId, "DELIVERY_POSSESSION", "carrier-simulator", "E3", "2026-08-20T19:25:00.000Z", {
       deliveryStatus: "DELIVERED",
@@ -113,13 +113,13 @@ const impossibleLogistics: ReturnIntegrityCase = CaseSchema.parse({
       requestedQuantity: 1,
     }),
     artifact("ev-log-auth", logisticsCaseId, "RETURN_AUTHORIZATION", "redo-returns-simulator", "E2", "2026-08-24T15:03:00.000Z", {
-      authorizedReturnLabel: "RMA-JC-10319-A",
+      authorizedReturnLabel: "RMA-SK-10319-A",
       returnMethod: "STAFFED_CARRIER_DROPOFF",
-      expectedSku: "JC-KEY-PRO-01",
+      expectedSku: "SK-SL-SLIP-DRESS",
       expectedQuantity: 1,
     }),
     artifact("ev-log-handoff", logisticsCaseId, "REVERSE_HANDOFF", "carrier-simulator", "E3", "2026-08-24T15:10:00.000Z", {
-      observedReturnLabel: "RMA-JC-10319-A",
+      observedReturnLabel: "RMA-SK-10319-A",
       handoffLatitude: 40.7608,
       handoffLongitude: -111.891,
       handoffRegion: "Salt Lake City, UT",
@@ -138,7 +138,7 @@ const impossibleLogistics: ReturnIntegrityCase = CaseSchema.parse({
       receiptCarrier: "ParcelCo",
       receiptDropoffRegion: "Salt Lake City, UT",
       receiptAcceptedAt: "2026-08-24T15:10:00.000Z",
-      receiptLabelAlias: "RMA-JC-10319-A",
+      receiptLabelAlias: "RMA-SK-10319-A",
     }, {
       availableAt: "2026-08-24T15:30:00.000Z",
       receivedAt: "2026-08-24T15:30:00.000Z",
@@ -168,70 +168,70 @@ const physicalReturn: ReturnIntegrityCase = CaseSchema.parse({
   journey: "PHYSICAL_RETURN",
   currentCheckpointId: "ITEM_INSPECTION",
   state: "REFUND_HELD",
-  orderAmountCents: 184_900,
-  expectedLossCents: 184_900,
+  orderAmountCents: 11_600,
+  expectedLossCents: 11_600,
   currency: "USD",
   createdAt: "2026-08-21T17:00:00.000Z",
   evidence: [
     artifact("ev-physical-order", physicalCaseId, "ORDER_RELEASE", "merchant-oms", "E2", "2026-08-21T17:00:00.000Z", {
-      expectedSku: "JC-ARC-ONE-KIT",
+      expectedSku: "SK-FE-CAMI-BODYSUIT",
       expectedQuantity: 2,
-      expectedSerials: ["JCA1-88K2", "JCA1-91M7"],
-      orderIdAlias: "JC-1042",
-      itemDescription: "Juniper Arc One two-camera field kit",
-      itemRetailValueCents: 184_900,
+      expectedSerials: ["SK-EPC-88K2", "SK-EPC-91M7"],
+      orderIdAlias: "SK-1042",
+      itemDescription: "Fits Everybody Cami Bodysuit (Onyx) · sizes M and L",
+      itemRetailValueCents: 11_600,
     }),
     artifact("ev-physical-outbound-weight", physicalCaseId, "OUTBOUND_PACK", "redo-warehouse-scale", "E4", "2026-08-21T17:25:00.000Z", {
-      expectedWeightGrams: 1800,
-      weightToleranceGrams: 90,
+      expectedWeightGrams: 380,
+      weightToleranceGrams: 25,
       scaleCalibrationStatus: "PASS",
-      expectedSku: "JC-ARC-ONE-KIT",
+      expectedSku: "SK-FE-CAMI-BODYSUIT",
       expectedQuantity: 2,
-      expectedSerials: ["JCA1-88K2", "JCA1-91M7"],
+      expectedSerials: ["SK-EPC-88K2", "SK-EPC-91M7"],
     }),
     artifact("ev-physical-outbound-photo-top", physicalCaseId, "OUTBOUND_PACK", "redo-warehouse-camera", "E4", "2026-08-21T17:25:10.000Z", {
       captureProtocol: "OUTBOUND_TOP_AND_SIDE",
-      expectedSku: "JC-ARC-ONE-KIT",
+      expectedSku: "SK-FE-CAMI-BODYSUIT",
       imageRole: "OUTBOUND_PACK_TOP",
     }, {
-      fixtureUrl: "/evidence/outbound-two-cameras.png",
+      fixtureUrl: "/evidence/outbound-two-bodysuits.png",
       piiClass: "NONE",
     }),
     artifact("ev-physical-outbound-photo-side", physicalCaseId, "OUTBOUND_PACK", "redo-warehouse-camera", "E4", "2026-08-21T17:25:12.000Z", {
       captureProtocol: "OUTBOUND_TOP_AND_SIDE",
-      expectedSku: "JC-ARC-ONE-KIT",
+      expectedSku: "SK-FE-CAMI-BODYSUIT",
       imageRole: "OUTBOUND_PACK_SIDE",
     }, {
-      fixtureUrl: "/evidence/outbound-two-cameras.png",
+      fixtureUrl: "/evidence/outbound-two-bodysuits.png",
       piiClass: "NONE",
     }),
     artifact("ev-physical-label", physicalCaseId, "RETURN_AUTHORIZATION", "redo-returns-simulator", "E2", "2026-08-23T18:00:00.000Z", {
       authorizedReturnLabel: "RMA-8821",
-      expectedSku: "JC-ARC-ONE-KIT",
+      expectedSku: "SK-FE-CAMI-BODYSUIT",
       expectedQuantity: 2,
     }),
     artifact("ev-physical-carrier", physicalCaseId, "REVERSE_HANDOFF", "carrier-simulator", "E3", "2026-08-23T19:15:00.000Z", {
       observedReturnLabel: "RMA-8821",
       carrierAcceptanceStatus: "ACCEPTED",
-      carrierWeightGrams: 180,
+      carrierWeightGrams: 42,
     }),
     artifact("ev-physical-receipt", physicalCaseId, "WAREHOUSE_RECEIPT", "redo-warehouse-scale", "E4", "2026-08-24T16:00:00.000Z", {
-      observedWeightGrams: 165,
-      expectedWeightGrams: 1800,
-      weightToleranceGrams: 90,
+      observedWeightGrams: 38,
+      expectedWeightGrams: 380,
+      weightToleranceGrams: 25,
       sealCondition: "INTACT",
       scaleCalibrationStatus: "PASS",
       observedReturnLabel: "RMA-8821",
     }),
     artifact("ev-physical-empty-photo", physicalCaseId, "ITEM_INSPECTION", "redo-warehouse-camera", "E4", "2026-08-24T16:03:00.000Z", {
       captureProtocol: "INBOUND_OPEN_BOX_OVERHEAD",
-      expectedSku: "JC-ARC-ONE-KIT",
+      expectedSku: "SK-FE-CAMI-BODYSUIT",
       observedSku: "NONE",
       expectedQuantity: 2,
       observedQuantity: 0,
-      expectedSerials: ["JCA1-88K2", "JCA1-91M7"],
+      expectedSerials: ["SK-EPC-88K2", "SK-EPC-91M7"],
       observedSerials: [],
-      operatorObservation: "No merchandise visible after protocol opening; packaging insert only.",
+      operatorObservation: "No garments or polybags visible after protocol opening; packing slip only.",
       imageRole: "INBOUND_OPEN_BOX",
     }, {
       fixtureUrl: "/evidence/return-empty-box.png",
@@ -241,13 +241,13 @@ const physicalReturn: ReturnIntegrityCase = CaseSchema.parse({
     artifact("ev-physical-second-inspection", physicalCaseId, "ITEM_INSPECTION", "redo-warehouse-operator", "E4", "2026-08-24T16:08:00.000Z", {
       expectedQuantity: 2,
       observedQuantity: 0,
-      expectedSerials: ["JCA1-88K2", "JCA1-91M7"],
+      expectedSerials: ["SK-EPC-88K2", "SK-EPC-91M7"],
       observedSerials: [],
       secondOperatorConfirmed: true,
       inspectionDisposition: "EMPTY_OR_MISSING_CONTENTS",
     }),
     artifact("ev-physical-appeal-assertion", physicalCaseId, "CONTEST_APPEAL_RECOVERY", "shopper-portal", "E0", "2026-08-24T18:10:00.000Z", {
-      shopperExplanation: "I placed both cameras in the Arc One field case before drop-off. Please review the carrier weight and packing photos.",
+      shopperExplanation: "I put both bodysuits back in the mailer before drop-off. Please review the carrier weight and packing photos.",
       appealSubmitted: true,
     }, {
       useScope: ["RISK_DECISION", "CUSTOMER_SUPPORT", "DISPUTE_EVIDENCE"],
@@ -261,7 +261,7 @@ const physicalReturn: ReturnIntegrityCase = CaseSchema.parse({
 export const fixtureCases: readonly ReturnIntegrityCase[] = [goodActorCheckout, impossibleLogistics, physicalReturn];
 
 export const syntheticImageFixtures = {
-  outboundProtocol: "/evidence/outbound-two-cameras.png",
+  outboundProtocol: "/evidence/outbound-two-bodysuits.png",
   emptyReturn: "/evidence/return-empty-box.png",
   wrongItem: "/evidence/return-wrong-item.png",
   possibleImitation: "/evidence/return-imitation.png",
